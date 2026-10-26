@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/pdf_models.dart';
 import '../services/smart_scanner_service.dart';
@@ -342,8 +343,8 @@ class _SmartScannerSheetState extends State<SmartScannerSheet> {
   }
 }
 
-/// Widget Interaktif 4 Titik Sudut untuk Memotong Tepi & Meluruskan Dokumen Miring
-class _InteractivePerspectiveCropper extends StatelessWidget {
+/// Widget Interaktif 4 Titik Sudut Ala HyperOS dengan Kaca Pembesar (Magnifying Loupe)
+class _InteractivePerspectiveCropper extends StatefulWidget {
   final dynamic rawBytes;
   final DocumentCorners corners;
   final ValueChanged<DocumentCorners> onCornersChanged;
@@ -355,6 +356,15 @@ class _InteractivePerspectiveCropper extends StatelessWidget {
     required this.onCornersChanged,
     required this.onDragEnd,
   });
+
+  @override
+  State<_InteractivePerspectiveCropper> createState() =>
+      _InteractivePerspectiveCropperState();
+}
+
+class _InteractivePerspectiveCropperState
+    extends State<_InteractivePerspectiveCropper> {
+  Offset? _activeDragPx;
 
   @override
   Widget build(BuildContext context) {
@@ -376,6 +386,11 @@ class _InteractivePerspectiveCropper extends StatelessWidget {
               (px.dy / boxH).clamp(0.02, 0.98),
             );
 
+        final tlPx = toPx(widget.corners.topLeft);
+        final trPx = toPx(widget.corners.topRight);
+        final brPx = toPx(widget.corners.bottomRight);
+        final blPx = toPx(widget.corners.bottomLeft);
+
         return SizedBox(
           width: boxW,
           height: boxH,
@@ -386,7 +401,7 @@ class _InteractivePerspectiveCropper extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
                   child: Image.memory(
-                    rawBytes,
+                    widget.rawBytes,
                     fit: BoxFit.fill,
                     gaplessPlayback: true,
                   ),
@@ -394,37 +409,65 @@ class _InteractivePerspectiveCropper extends StatelessWidget {
               ),
               Positioned.fill(
                 child: CustomPaint(
-                  painter: _QuadCropPainter(corners: corners),
+                  painter: _QuadCropPainter(corners: widget.corners),
                 ),
               ),
               _buildCornerHandle(
-                pos: toPx(corners.topLeft),
-                onDrag: (delta) {
-                  final next = toNorm(toPx(corners.topLeft) + delta);
-                  onCornersChanged(corners.copyWith(topLeft: next));
+                pos: tlPx,
+                onDragStart: () => setState(() => _activeDragPx = tlPx),
+                onDragUpdate: (delta) {
+                  final next = toNorm(toPx(widget.corners.topLeft) + delta);
+                  widget.onCornersChanged(widget.corners.copyWith(topLeft: next));
+                  setState(() => _activeDragPx = toPx(next));
+                },
+                onDragEnd: () {
+                  setState(() => _activeDragPx = null);
+                  widget.onDragEnd();
                 },
               ),
               _buildCornerHandle(
-                pos: toPx(corners.topRight),
-                onDrag: (delta) {
-                  final next = toNorm(toPx(corners.topRight) + delta);
-                  onCornersChanged(corners.copyWith(topRight: next));
+                pos: trPx,
+                onDragStart: () => setState(() => _activeDragPx = trPx),
+                onDragUpdate: (delta) {
+                  final next = toNorm(toPx(widget.corners.topRight) + delta);
+                  widget.onCornersChanged(widget.corners.copyWith(topRight: next));
+                  setState(() => _activeDragPx = toPx(next));
+                },
+                onDragEnd: () {
+                  setState(() => _activeDragPx = null);
+                  widget.onDragEnd();
                 },
               ),
               _buildCornerHandle(
-                pos: toPx(corners.bottomRight),
-                onDrag: (delta) {
-                  final next = toNorm(toPx(corners.bottomRight) + delta);
-                  onCornersChanged(corners.copyWith(bottomRight: next));
+                pos: brPx,
+                onDragStart: () => setState(() => _activeDragPx = brPx),
+                onDragUpdate: (delta) {
+                  final next = toNorm(toPx(widget.corners.bottomRight) + delta);
+                  widget.onCornersChanged(widget.corners.copyWith(bottomRight: next));
+                  setState(() => _activeDragPx = toPx(next));
+                },
+                onDragEnd: () {
+                  setState(() => _activeDragPx = null);
+                  widget.onDragEnd();
                 },
               ),
               _buildCornerHandle(
-                pos: toPx(corners.bottomLeft),
-                onDrag: (delta) {
-                  final next = toNorm(toPx(corners.bottomLeft) + delta);
-                  onCornersChanged(corners.copyWith(bottomLeft: next));
+                pos: blPx,
+                onDragStart: () => setState(() => _activeDragPx = blPx),
+                onDragUpdate: (delta) {
+                  final next = toNorm(toPx(widget.corners.bottomLeft) + delta);
+                  widget.onCornersChanged(widget.corners.copyWith(bottomLeft: next));
+                  setState(() => _activeDragPx = toPx(next));
+                },
+                onDragEnd: () {
+                  setState(() => _activeDragPx = null);
+                  widget.onDragEnd();
                 },
               ),
+
+              // Kaca Pembesar (Magnifying Loupe 2.2x) saat sudut digeser
+              if (_activeDragPx != null)
+                _buildMagnifyingLoupe(boxW: boxW, boxH: boxH, posPx: _activeDragPx!),
             ],
           ),
         );
@@ -434,27 +477,113 @@ class _InteractivePerspectiveCropper extends StatelessWidget {
 
   Widget _buildCornerHandle({
     required Offset pos,
-    required ValueChanged<Offset> onDrag,
+    required VoidCallback onDragStart,
+    required ValueChanged<Offset> onDragUpdate,
+    required VoidCallback onDragEnd,
   }) {
-    const double handleSize = 36;
+    const double handleSize = 40;
     return Positioned(
       left: pos.dx - handleSize / 2,
       top: pos.dy - handleSize / 2,
       child: GestureDetector(
-        onPanUpdate: (details) => onDrag(details.delta),
+        onPanStart: (_) => onDragStart(),
+        onPanUpdate: (details) => onDragUpdate(details.delta),
         onPanEnd: (_) => onDragEnd(),
+        onPanCancel: onDragEnd,
         child: Container(
           width: handleSize,
           height: handleSize,
           alignment: Alignment.center,
           color: Colors.transparent,
           child: Container(
-            width: 20,
-            height: 20,
+            width: 22,
+            height: 22,
             decoration: BoxDecoration(
               color: KertasColors.vermilion,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2.5),
+              border: Border.all(color: Colors.white, width: 2.8),
+              boxShadow: const [
+                BoxShadow(color: Colors.black45, blurRadius: 4),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMagnifyingLoupe({
+    required double boxW,
+    required double boxH,
+    required Offset posPx,
+  }) {
+    const double loupeSize = 88;
+    final double normX = (posPx.dx / boxW).clamp(0.0, 1.0);
+    final double normY = (posPx.dy / boxH).clamp(0.0, 1.0);
+
+    // Letakkan kaca pembesar 74px di atas jari (atau di bawah jika dekat batas atas)
+    double loupeLeft = posPx.dx - loupeSize / 2;
+    loupeLeft = loupeLeft.clamp(4.0, math.max(4.0, boxW - loupeSize - 4.0));
+    double loupeTop = posPx.dy - loupeSize - 24;
+    if (loupeTop < 4) {
+      loupeTop = posPx.dy + 34;
+    }
+
+    return Positioned(
+      left: loupeLeft,
+      top: loupeTop,
+      child: IgnorePointer(
+        child: Container(
+          width: loupeSize,
+          height: loupeSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black,
+            border: Border.all(color: Colors.white, width: 2.6),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black54,
+                blurRadius: 10,
+                spreadRadius: 2,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Transform.scale(
+                  scale: 2.2,
+                  alignment: FractionalOffset(normX, normY),
+                  child: Image.memory(
+                    widget.rawBytes,
+                    fit: BoxFit.fill,
+                    gaplessPlayback: true,
+                  ),
+                ),
+                // Garis bidik (crosshair) di tengah kaca pembesar
+                Center(
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: KertasColors.vermilion, width: 2),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 3.5,
+                        height: 3.5,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

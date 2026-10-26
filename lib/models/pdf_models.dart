@@ -87,11 +87,11 @@ enum QualityPreset {
   }
 }
 
-/// Filter pemindaian cerdas dokumen (Fase 4)
+/// Filter pemindaian cerdas dokumen ala HyperOS (Fase 4)
 enum DocumentFilterType {
   original('original', 'Foto Asli', 'Warna asli tanpa perubahan'),
-  magicColor('magic', 'Cerahkan Kertas', 'Putihkan latar kertas & angkat kontras tulisan'),
-  blackAndWhite('bw', 'Hitam Putih Tegas', 'Tinta hitam pekat seperti mesin fotokopi/scanner'),
+  magicColor('magic', 'Enhanced', 'Putihkan latar kertas, hilangkan bayangan & pertahankan warna tinta'),
+  blackAndWhite('bw', 'Hitam Putih', 'Tinta hitam pekat kontras tinggi & kertas putih bersih'),
   grayscaleSharpen('gray', 'Abu-abu Tajam', 'Skala abu-abu dengan penajaman tepi huruf');
 
   final String code;

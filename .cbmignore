@@ -1,0 +1,17 @@
+# codebase-memory-mcp — project ignore rules (gitignore syntax)
+# Higher precedence than .gitignore for the code graph.
+
+# Snapshot builds of older versions: duplicate copies of lib/, pure noise
+# for search_graph / impact analysis (they point at stale symbols).
+v1.1.0/
+v1.1.1/
+v1.1.2/
+
+# Release artifacts: APK / web bundles (binaries, not source)
+releases/
+
+# Local graph database + logs written by codebase-memory-mcp
+.codebase-memory/
+
+# Build output
+build/

@@ -44,8 +44,8 @@ class PdfGeneratorService {
 
     final doc = pw.Document(
       title: normalizedName,
-      author: 'KertasPDF',
-      creator: 'KertasPDF Offline Scanner',
+      author: 'QuickPDF',
+      creator: 'QuickPDF Offline Scanner',
       compress: true,
     );
 

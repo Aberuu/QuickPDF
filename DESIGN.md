@@ -1,7 +1,7 @@
-# DESIGN.md: KertasPDF
+# DESIGN.md: QuickPDF
 
 ## 1. Identitas & Karakter Produk
-- **Nama Produk**: KertasPDF
+- **Nama Produk**: QuickPDF
 - **Logo / Ikon**: Lembaran kertas geometris dengan sudut kanan atas terlipat (folded corner) dan garis pindai horizontal berwarna merah-oranye tegas (`#D9381E`).
 - **Audiens Utama**: Mahasiswa yang memotret lembar jawaban/soal untuk dikirim ke dosen, pekerja administrasi, dan masyarakat umum yang menggabungkan dokumen kependudukan (KTP, KK, Ijazah).
 - **Karakter Visual**: Utilitarian & Taktil (Alat kerja mahasiswa yang cepat, jelas, ramah satu tangan / thumb-friendly, kontras tinggi layaknya tinta di atas kertas fisik, dan 100% bekerja offline).

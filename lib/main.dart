@@ -5,17 +5,19 @@ import 'theme/kertas_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const KertasPdfApp());
+  runApp(const QuickPdfApp());
 }
 
-class KertasPdfApp extends StatefulWidget {
-  const KertasPdfApp({super.key});
+class QuickPdfApp extends StatefulWidget {
+  const QuickPdfApp({super.key});
 
   @override
-  State<KertasPdfApp> createState() => _KertasPdfAppState();
+  State<QuickPdfApp> createState() => _QuickPdfAppState();
 }
 
-class _KertasPdfAppState extends State<KertasPdfApp> {
+typedef KertasPdfApp = QuickPdfApp;
+
+class _QuickPdfAppState extends State<QuickPdfApp> {
   ThemeMode _themeMode = ThemeMode.light;
 
   @override
@@ -38,7 +40,7 @@ class _KertasPdfAppState extends State<KertasPdfApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'KertasPDF',
+      title: 'QuickPDF',
       debugShowCheckedModeBanner: false,
       theme: KertasTheme.light(),
       darkTheme: KertasTheme.dark(),

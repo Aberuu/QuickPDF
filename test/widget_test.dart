@@ -5,6 +5,7 @@ import 'package:kertas_pdf/main.dart';
 import 'package:kertas_pdf/models/pdf_models.dart';
 import 'package:kertas_pdf/services/pdf_generator_service.dart';
 import 'package:kertas_pdf/services/smart_scanner_service.dart';
+import 'package:kertas_pdf/widgets/screenshot_capture_animation.dart';
 
 void main() {
   setUp(() {
@@ -49,23 +50,23 @@ void main() {
     expect(gen.elapsedMs, lessThan(3000));
   });
 
-  testWidgets('Verifikasi responsivitas mobile (320px, 375px, 414px, 768px) & alur lengkap Fase 1-4',
+  testWidgets('Verifikasi responsivitas mobile (320px, 375px, 390px, 414px, 768px) & alur lengkap Fase 1-4',
       (WidgetTester tester) async {
-    for (final width in [320.0, 375.0, 414.0, 768.0]) {
+    for (final width in [320.0, 375.0, 390.0, 414.0, 768.0]) {
       tester.view.physicalSize = Size(width, 844);
       tester.view.devicePixelRatio = 1.0;
-      await tester.pumpWidget(const KertasPdfApp());
+      await tester.pumpWidget(const QuickPdfApp());
       await tester.pumpAndSettle();
-      expect(find.text('KertasPDF'), findsOneWidget);
+      expect(find.text('QuickPDF'), findsNWidgets(2));
+      expect(find.text('Auto-Scan'), findsOneWidget);
     }
 
-    // Set ke layar mobile standar 390x844 untuk klik menyeluruh (R-35)
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const KertasPdfApp());
+    await tester.pumpWidget(const QuickPdfApp());
     await tester.pumpAndSettle();
 
     // 1. Toggle Tema: Mode Terang -> Mode Gelap -> Mode Terang (R-34)
@@ -141,34 +142,74 @@ void main() {
     expect(find.text('Riwayat PDF (0)'), findsOneWidget);
   });
 
-  testWidgets('Verifikasi BatchCameraScreen, FullScreenPreviewDialog & SmartScannerSheet',
+  testWidgets('Verifikasi Tombol QuickPDF, Auto-Scan, Toggle Manual Shutter, Ganti Kamera & Buat PDF',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const KertasPdfApp());
+    await tester.pumpWidget(const QuickPdfApp());
     await tester.pumpAndSettle();
 
-    // 1. Buka Kamera Beruntun (BatchCameraScreen)
-    await tester.tap(find.text('Kamera'));
+    // 1. Ketuk tombol utama QuickPDF (Auto-Scan)
+    await tester.tap(find.text('Auto-Scan'));
     await tester.pumpAndSettle();
-    expect(find.text('Kamera Beruntun'), findsOneWidget);
 
-    // Matikan auto-enhance agar instan dalam widget test, lalu Potret Lembar
-    await tester.tap(find.text('Auto-Rapikan'));
+    expect(find.text('QuickPDF Live Scanner'), findsOneWidget);
+    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Enhanced'), findsOneWidget);
+    expect(find.text('Hitam Putih'), findsOneWidget);
+    expect(find.text('Foto Asli'), findsOneWidget);
+    // Pastikan tombol Galeri terlihat sebelum ada foto yang dipotret
+    expect(find.text('Galeri'), findsOneWidget);
+
+    // Ganti filter kamera ke Hitam Putih ala HyperOS
+    await tester.tap(find.text('Hitam Putih'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Potret Lembar'));
+
+    // Majukan waktu selama ~1,1 detik agar detektor mengunci stabil 0,8 detik dan memotret otomatis
+    for (int i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 120));
+    }
     await tester.pumpAndSettle();
+
     expect(find.text('Selesai (1)'), findsOneWidget);
+    expect(find.byType(CapturedPagesCornerStack), findsOneWidget);
+    expect(find.byType(ScreenshotCaptureAnimationOverlay), findsOneWidget);
 
-    // Kembali ke Meja Kerja membawa 1 lembar hasil potret kamera
-    await tester.tap(find.text('Selesai (1)'));
+    // 2. Uji tombol Ganti Kamera (membuka pemilih perangkat kamera eksternal/internal)
+    await tester.tap(
+      find.byTooltip('Ganti Kamera (Kamera Eksternal / Depan / Belakang)'),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Meja Kerja (1)'), findsOneWidget);
+    expect(find.text('Pilih Perangkat Kamera'), findsOneWidget);
+    // Tutup sheet pemilih kamera
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
 
-    // 2. Buka Lihat Halaman Besar (FullScreenPreviewDialog)
+    // 3. Nonaktifkan Auto-Scan secara manual -> beralih ke Mode Manual (Tombol Shutter)
+    await tester.tap(find.text('Auto'));
+    await tester.pumpAndSettle();
+    expect(find.text('Manual'), findsOneWidget);
+    expect(find.text('Potret Manual'), findsOneWidget);
+
+    // Ketuk tombol shutter 'Potret Manual' untuk memotret lembar ke-2 secara manual
+    await tester.tap(find.text('Potret Manual'));
+    await tester.pumpAndSettle();
+    expect(find.text('Selesai (2)'), findsOneWidget);
+
+    // 4. Ketuk Selesai (2) -> langsung membuka modal Buat PDF (Siapkan Dokumen PDF)
+    await tester.tap(find.text('Selesai (2)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Siapkan Dokumen PDF'), findsOneWidget);
+
+    // Tutup modal Buat PDF untuk memeriksa halaman di Meja Kerja
+    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Meja Kerja (2)'), findsOneWidget);
+
+    // 5. Buka Lihat Halaman Besar (FullScreenPreviewDialog)
     await tester.tap(find.byIcon(Icons.zoom_in).first);
     await tester.pumpAndSettle();
     expect(find.byTooltip('Reset Perbesaran (Zoom 100%)'), findsOneWidget);
@@ -177,7 +218,7 @@ void main() {
     await tester.tap(find.byTooltip('Tutup Pratinjau'));
     await tester.pumpAndSettle();
 
-    // 3. Buka SmartScannerSheet (Fase 4: Rapikan Halaman)
+    // 6. Buka SmartScannerSheet (Fase 4: Rapikan Halaman)
     await tester.tap(find.byTooltip('Rapikan Tepi & Filter Dokumen').first);
     await tester.pumpAndSettle();
     expect(find.text('Rapikan Halaman 01'), findsOneWidget);
@@ -185,6 +226,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Simpan Perubahan Halaman'));
     await tester.pumpAndSettle();
-    expect(find.text('Meja Kerja (1)'), findsOneWidget);
+    expect(find.text('Meja Kerja (2)'), findsOneWidget);
   });
 }

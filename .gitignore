@@ -46,3 +46,12 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# codebase-memory-mcp local graph database
+.codebase-memory/
+
+# Release binaries (APK / web bundles) — distributed via GitHub Releases, not git
+releases/
+v1.1.0/
+v1.1.1/
+v1.1.2/

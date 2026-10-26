@@ -7,13 +7,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>KertasPDF</string>
+	<string>QuickPDF</string>
 	<key>NSCameraUsageDescription</key>
-	<string>KertasPDF memerlukan akses kamera untuk memotret lembar dokumen menjadi PDF.</string>
+	<string>QuickPDF memerlukan akses kamera untuk mendeteksi dan memotret lembar dokumen secara langsung menjadi PDF.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>KertasPDF memerlukan akses galeri untuk menggabungkan foto menjadi dokumen PDF.</string>
+	<string>QuickPDF memerlukan akses galeri untuk menggabungkan foto menjadi dokumen PDF.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>KertasPDF memerlukan izin untuk menyimpan dokumen ke perangkat Anda.</string>
+	<string>QuickPDF memerlukan izin untuk menyimpan dokumen ke perangkat Anda.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

@@ -7,7 +7,7 @@ Future<String?> saveBytesToLocalFile(String fileName, Uint8List bytes) async {
     final dir = await getApplicationDocumentsDirectory().timeout(
       const Duration(milliseconds: 600),
     );
-    final folder = Directory('${dir.path}/KertasPDF');
+    final folder = Directory('${dir.path}/QuickPDF');
     if (!await folder.exists()) {
       await folder.create(recursive: true);
     }

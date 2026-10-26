@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:image/image.dart' as img;
 import '../models/pdf_models.dart';
+import 'document_detector.dart';
 
 /// Layanan pemrosesan citra dokumen 100% On-Device (Fase 4: Smart Scanner)
 /// Meliputi:
@@ -13,8 +15,13 @@ import '../models/pdf_models.dart';
 /// 5. Kompresi kualitas (Rendah, Sedang, Tinggi)
 class SmartScannerService {
   /// Mendeteksi 4 titik sudut kertas di atas permukaan meja secara otomatis
-  /// berdasarkan analisis kontras luminansi dari tepi luar ke arah tengah.
+  /// menggunakan mesin DocumentDetector 100% On-Device.
   static DocumentCorners detectDocumentCorners(Uint8List rawBytes) {
+    final detected = DocumentDetector.detectFromImageBytes(rawBytes);
+    if (detected != null) {
+      return detected.corners;
+    }
+
     final decoded = img.decodeImage(rawBytes);
     if (decoded == null) {
       return const DocumentCorners(
@@ -178,25 +185,33 @@ class SmartScannerService {
     final nextBrightness = brightnessDelta ?? item.brightnessDelta;
     final nextContrast = contrastFactor ?? item.contrastFactor;
 
-    final result = await compute(
-      _processImageIsolate,
-      _ProcessPayload(
-        originalBytes: item.originalBytes,
-        rotationQuarterTurns: nextRotation,
-        filterCode: nextFilter.code,
-        tlX: nextCorners.topLeft.dx,
-        tlY: nextCorners.topLeft.dy,
-        trX: nextCorners.topRight.dx,
-        trY: nextCorners.topRight.dy,
-        brX: nextCorners.bottomRight.dx,
-        brY: nextCorners.bottomRight.dy,
-        blX: nextCorners.bottomLeft.dx,
-        blY: nextCorners.bottomLeft.dy,
-        isFullFrame: nextCorners.isFullFrame,
-        brightnessDelta: nextBrightness,
-        contrastFactor: nextContrast,
-      ),
+    final payload = _ProcessPayload(
+      originalBytes: item.originalBytes,
+      rotationQuarterTurns: nextRotation,
+      filterCode: nextFilter.code,
+      tlX: nextCorners.topLeft.dx,
+      tlY: nextCorners.topLeft.dy,
+      trX: nextCorners.topRight.dx,
+      trY: nextCorners.topRight.dy,
+      brX: nextCorners.bottomRight.dx,
+      brY: nextCorners.bottomRight.dy,
+      blX: nextCorners.bottomLeft.dx,
+      blY: nextCorners.bottomLeft.dy,
+      isFullFrame: nextCorners.isFullFrame,
+      brightnessDelta: nextBrightness,
+      contrastFactor: nextContrast,
     );
+
+    bool isWidgetTest = false;
+    try {
+      isWidgetTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    } catch (_) {
+      isWidgetTest = true;
+    }
+    final _ProcessOutput result = (kIsWeb || isWidgetTest)
+        ? _processImageIsolate(payload)
+        : await compute(_processImageIsolate, payload);
 
     return item.copyWith(
       displayBytes: result.bytes,
@@ -469,43 +484,120 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
 
   img.Image working = decoded;
 
-  // 1. Koreksi Perspektif 4 Titik Sudut (Perspective Deskew / Bilinear Warp)
+  // 1. Koreksi Distorsi & Sudut Perspektif 4 Titik Sudut Ala HyperOS (True Homography Rectification)
   if (!payload.isFullFrame) {
     final srcW = working.width.toDouble();
     final srcH = working.height.toDouble();
 
-    final tl = math.Point<double>(payload.tlX * srcW, payload.tlY * srcH);
-    final tr = math.Point<double>(payload.trX * srcW, payload.trY * srcH);
-    final br = math.Point<double>(payload.brX * srcW, payload.brY * srcH);
-    final bl = math.Point<double>(payload.blX * srcW, payload.blY * srcH);
+    final x0 = (payload.tlX * srcW).clamp(0.0, srcW - 1);
+    final y0 = (payload.tlY * srcH).clamp(0.0, srcH - 1);
+    final x1 = (payload.trX * srcW).clamp(0.0, srcW - 1);
+    final y1 = (payload.trY * srcH).clamp(0.0, srcH - 1);
+    final x2 = (payload.brX * srcW).clamp(0.0, srcW - 1);
+    final y2 = (payload.brY * srcH).clamp(0.0, srcH - 1);
+    final x3 = (payload.blX * srcW).clamp(0.0, srcW - 1);
+    final y3 = (payload.blY * srcH).clamp(0.0, srcH - 1);
 
-    final topWidth = tl.distanceTo(tr);
-    final bottomWidth = bl.distanceTo(br);
-    final leftHeight = tl.distanceTo(bl);
-    final rightHeight = tr.distanceTo(br);
+    // Hitung jarak sisi untuk menentukan dimensi un-foreshortened
+    final dTop = math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+    final dBottom = math.sqrt((x2 - x3) * (x2 - x3) + (y2 - y3) * (y2 - y3));
+    final dLeft = math.sqrt((x3 - x0) * (x3 - x0) + (y3 - y0) * (y3 - y0));
+    final dRight = math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
 
-    final dstW = math.max(120, ((topWidth + bottomWidth) / 2).round());
-    final dstH = math.max(120, ((leftHeight + rightHeight) / 2).round());
+    double rawW = math.max(dTop, dBottom);
+    double rawH = math.max(dLeft, dRight);
+
+    // Kompensasi pemendekan perspektif (foreshortening compensation)
+    // Jika rasio atas/bawah < 0.88, sudut kemiringan vertikal signifikan
+    final double tiltRatioV = math.min(dTop, dBottom) / math.max(1.0, math.max(dTop, dBottom));
+    if (tiltRatioV < 0.88 && rawH < rawW * 1.25) {
+      final double compFactor = (1.0 / math.max(0.45, tiltRatioV)).clamp(1.10, 1.45);
+      rawH = math.max(rawH * compFactor, rawW * 1.30);
+    }
+
+    final dstW = rawW.round().clamp(160, 2600);
+    final dstH = rawH.round().clamp(160, 3400);
+
+    // Matriks Homografi 8-DoF Closed-Form mapping unit square (0..1, 0..1) -> quadrilateral (x0..x3, y0..y3)
+    final double dx1 = x1 - x2;
+    final double dx2 = x3 - x2;
+    final double sx = x0 - x1 + x2 - x3;
+    final double dy1 = y1 - y2;
+    final double dy2 = y3 - y2;
+    final double sy = y0 - y1 + y2 - y3;
+
+    final double denom = dx1 * dy2 - dy1 * dx2;
+    double ha, hb, hc, hd, he, hf, hg, hh;
+
+    if (denom.abs() < 1e-7 || (sx.abs() < 1e-5 && sy.abs() < 1e-5)) {
+      ha = x1 - x0;
+      hb = x3 - x0;
+      hc = x0;
+      hd = y1 - y0;
+      he = y3 - y0;
+      hf = y0;
+      hg = 0.0;
+      hh = 0.0;
+    } else {
+      hg = (sx * dy2 - sy * dx2) / denom;
+      hh = (dx1 * sy - dy1 * sx) / denom;
+      ha = x1 - x0 + hg * x1;
+      hb = x3 - x0 + hh * x3;
+      hc = x0;
+      hd = y1 - y0 + hg * y1;
+      he = y3 - y0 + hh * y3;
+      hf = y0;
+    }
 
     final warped = img.Image(width: dstW, height: dstH);
-    for (int y = 0; y < dstH; y++) {
-      final v = y / math.max(1, dstH - 1);
-      for (int x = 0; x < dstW; x++) {
-        final u = x / math.max(1, dstW - 1);
-        final sx = (1 - u) * (1 - v) * tl.x +
-            u * (1 - v) * tr.x +
-            u * v * br.x +
-            (1 - u) * v * bl.x;
-        final sy = (1 - u) * (1 - v) * tl.y +
-            u * (1 - v) * tr.y +
-            u * v * br.y +
-            (1 - u) * v * bl.y;
+    final double invDstW = 1.0 / math.max(1, dstW - 1);
+    final double invDstH = 1.0 / math.max(1, dstH - 1);
+    final int maxSrcX = working.width - 1;
+    final int maxSrcY = working.height - 1;
 
-        final px = working.getPixel(
-          sx.round().clamp(0, working.width - 1),
-          sy.round().clamp(0, working.height - 1),
-        );
-        warped.setPixelRgb(x, y, px.r, px.g, px.b);
+    for (int y = 0; y < dstH; y++) {
+      final double v = y * invDstH;
+      for (int x = 0; x < dstW; x++) {
+        final double u = x * invDstW;
+        final double z = hg * u + hh * v + 1.0;
+        final double invZ = (z.abs() < 1e-7) ? 1.0 : (1.0 / z);
+
+        final double srcX = (ha * u + hb * v + hc) * invZ;
+        final double srcY = (hd * u + he * v + hf) * invZ;
+
+        int sx0 = srcX.floor();
+        int sy0 = srcY.floor();
+        int sx1 = (sx0 + 1).clamp(0, maxSrcX);
+        int sy1 = (sy0 + 1).clamp(0, maxSrcY);
+        sx0 = sx0.clamp(0, maxSrcX);
+        sy0 = sy0.clamp(0, maxSrcY);
+
+        double fx = srcX - sx0;
+        double fy = srcY - sy0;
+        if (fx < 0) fx = 0;
+        if (fx > 1) fx = 1;
+        if (fy < 0) fy = 0;
+        if (fy > 1) fy = 1;
+
+        final p00 = working.getPixel(sx0, sy0);
+        final p10 = working.getPixel(sx1, sy0);
+        final p01 = working.getPixel(sx0, sy1);
+        final p11 = working.getPixel(sx1, sy1);
+
+        final double r = (1 - fx) * (1 - fy) * p00.r +
+            fx * (1 - fy) * p10.r +
+            (1 - fx) * fy * p01.r +
+            fx * fy * p11.r;
+        final double gCol = (1 - fx) * (1 - fy) * p00.g +
+            fx * (1 - fy) * p10.g +
+            (1 - fx) * fy * p01.g +
+            fx * fy * p11.g;
+        final double b = (1 - fx) * (1 - fy) * p00.b +
+            fx * (1 - fy) * p10.b +
+            (1 - fx) * fy * p01.b +
+            fx * fy * p11.b;
+
+        warped.setPixelRgb(x, y, r.round(), gCol.round(), b.round());
       }
     }
     working = warped;
@@ -521,13 +613,59 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
     working = img.copyRotate(working, angle: 270);
   }
 
-  // 3. Terapkan Filter Dokumen Instan (Fase 4) & Kecerahan/Kontras Manual
+  // 3. Terapkan Filter Dokumen Instan Ala HyperOS (Enhanced, Hitam Putih, Foto Asli) & Kontras Manual
   final filter = payload.filterCode;
   final bOffset = (payload.brightnessDelta * 255).round();
   final cFactor = payload.contrastFactor;
 
   if (filter != 'original' || bOffset != 0 || (cFactor - 1.0).abs() > 0.01) {
+    final int imgW = working.width;
+    final int imgH = working.height;
+
+    // Estimasi peta latar belakang pencahayaan lokal (grid 24 x 32) untuk mengangkat bayangan
+    const int gridCols = 24;
+    const int gridRows = 32;
+    final List<double> bgGrid = List<double>.filled(gridCols * gridRows, 220.0);
+
+    if (filter == 'magic' || filter == 'bw' || filter == 'gray') {
+      for (int gy = 0; gy < gridRows; gy++) {
+        final int startY = (gy * imgH / gridRows).round();
+        final int endY = ((gy + 1) * imgH / gridRows).round().clamp(startY + 1, imgH);
+        for (int gx = 0; gx < gridCols; gx++) {
+          final int startX = (gx * imgW / gridCols).round();
+          final int endX = ((gx + 1) * imgW / gridCols).round().clamp(startX + 1, imgW);
+
+          double maxL = 0;
+          double sumTop = 0;
+          int countTop = 0;
+          final int stepX = math.max(1, (endX - startX) ~/ 6);
+          final int stepY = math.max(1, (endY - startY) ~/ 6);
+
+          for (int sy = startY; sy < endY; sy += stepY) {
+            for (int sx = startX; sx < endX; sx += stepX) {
+              final p = working.getPixel(sx, sy);
+              final double lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+              if (lum > maxL) maxL = lum;
+              if (lum > 90) {
+                sumTop += lum;
+                countTop++;
+              }
+            }
+          }
+          final double avgL = countTop > 0 ? (sumTop / countTop) : maxL;
+          bgGrid[gy * gridCols + gx] = math.max(110.0, 0.4 * avgL + 0.6 * maxL);
+        }
+      }
+    }
+
+    final double invImgW = 1.0 / math.max(1, imgW - 1);
+    final double invImgH = 1.0 / math.max(1, imgH - 1);
+
     for (int y = 0; y < working.height; y++) {
+      final double gY = (y * invImgH) * (gridRows - 1);
+      final int gyi = gY.floor().clamp(0, gridRows - 2);
+      final double gYf = gY - gyi;
+
       for (int x = 0; x < working.width; x++) {
         final p = working.getPixel(x, y);
         double r = p.r.toDouble();
@@ -535,25 +673,61 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
         double b = p.b.toDouble();
 
         if (filter == 'magic') {
-          // Cerahkan Kertas (Magic Color): angkat latar kertas jadi putih bersih & tajamkan tinta
-          final lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          if (lum > 165) {
-            final boost = ((lum - 165) / 90.0).clamp(0.0, 1.0);
-            r = r + (255 - r) * (0.68 * boost);
-            g = g + (255 - g) * (0.68 * boost);
-            b = b + (255 - b) * (0.68 * boost);
+          // Enhanced: Normalisasi bayangan lokal, putihkan latar kertas, pertajam tinta warna & tulisan
+          final double gX = (x * invImgW) * (gridCols - 1);
+          final int gxi = gX.floor().clamp(0, gridCols - 2);
+          final double gXf = gX - gxi;
+
+          final double b00 = bgGrid[gyi * gridCols + gxi];
+          final double b10 = bgGrid[gyi * gridCols + gxi + 1];
+          final double b01 = bgGrid[(gyi + 1) * gridCols + gxi];
+          final double b11 = bgGrid[(gyi + 1) * gridCols + gxi + 1];
+          final double localBg = (1 - gXf) * (1 - gYf) * b00 +
+              gXf * (1 - gYf) * b10 +
+              (1 - gXf) * gYf * b01 +
+              gXf * gYf * b11;
+
+          final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          final double normLum = (lum / math.max(60.0, localBg)) * 255.0;
+
+          if (normLum >= 195) {
+            // Area kertas: angkat menjadi putih bersih, hapus bayangan tangan/ruangan
+            final double boost = ((normLum - 195) / 60.0).clamp(0.0, 1.0);
+            final double whiteFactor = 255.0 / math.max(70.0, localBg);
+            r = (r * whiteFactor).clamp(0.0, 255.0);
+            g = (g * whiteFactor).clamp(0.0, 255.0);
+            b = (b * whiteFactor).clamp(0.0, 255.0);
+            r = r + (255 - r) * (0.80 * boost);
+            g = g + (255 - g) * (0.80 * boost);
+            b = b + (255 - b) * (0.80 * boost);
           } else {
-            // Pekatkan tinta tulisan
-            r = ((r - 128) * 1.32 + 118);
-            g = ((g - 128) * 1.32 + 118);
-            b = ((b - 128) * 1.32 + 118);
+            // Area teks / tinta tulisan / stempel: pertajam kontras warna asli
+            final double inkFactor = (normLum / 195.0).clamp(0.0, 1.0);
+            r = (r * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
+            g = (g * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
+            b = (b * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
           }
         } else if (filter == 'bw') {
-          // Hitam Putih Tegas (Binarisasi lembut untuk teks/tulisan tangan)
-          final lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          final val = lum > 152
-              ? (245 + (lum - 152) * 0.1).clamp(240.0, 255.0)
-              : (lum * 0.42).clamp(12.0, 95.0);
+          // Hitam Putih: Binarisasi adaptif ala fotokopi presisi tinggi
+          final double gX = (x * invImgW) * (gridCols - 1);
+          final int gxi = gX.floor().clamp(0, gridCols - 2);
+          final double gXf = gX - gxi;
+
+          final double b00 = bgGrid[gyi * gridCols + gxi];
+          final double b10 = bgGrid[gyi * gridCols + gxi + 1];
+          final double b01 = bgGrid[(gyi + 1) * gridCols + gxi];
+          final double b11 = bgGrid[(gyi + 1) * gridCols + gxi + 1];
+          final double localBg = (1 - gXf) * (1 - gYf) * b00 +
+              gXf * (1 - gYf) * b10 +
+              (1 - gXf) * gYf * b01 +
+              gXf * gYf * b11;
+
+          final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          final double normLum = (lum / math.max(60.0, localBg)) * 255.0;
+
+          final double val = normLum >= 182
+              ? 255.0
+              : ((normLum / 182.0) * 45.0 + 15.0).clamp(15.0, 60.0);
           r = val;
           g = val;
           b = val;
@@ -566,12 +740,14 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
           b = stretched;
         }
 
-        // Penyesuaian manual kecerahan & kontras
-        r = ((r - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
-        g = ((g - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
-        b = ((b - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+        // Penyesuaian manual kecerahan & kontras jika disetel pengguna
+        if (bOffset != 0 || (cFactor - 1.0).abs() > 0.01) {
+          r = ((r - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+          g = ((g - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+          b = ((b - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+        }
 
-        working.setPixelRgb(x, y, r.round(), g.round(), b.round());
+        working.setPixelRgb(x, y, r.round().clamp(0, 255), g.round().clamp(0, 255), b.round().clamp(0, 255));
       }
     }
   }

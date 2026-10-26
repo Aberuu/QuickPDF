@@ -22,6 +22,7 @@ class KertasColors {
 
   // Aksen Utama & Status Fungsional
   static const Color vermilion = Color(0xFFD9381E);
+  static const Color vermilionStamp = vermilion;
   static const Color vermilionDark = Color(0xFFEA4B30);
   static const Color successGreen = Color(0xFF1B7A43);
   static const Color warningAmber = Color(0xFFB45309);

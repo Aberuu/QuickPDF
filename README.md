@@ -1,4 +1,4 @@
-# KertasPDF
+# QuickPDF
 
 Aplikasi konverter foto ke PDF yang cepat, praktis, dan 100% berjalan lokal di perangkat (offline) untuk mahasiswa, pekerja administrasi, dan masyarakat umum.
 

@@ -5,9 +5,9 @@ import '../services/local_history_store.dart';
 import '../services/pdf_generator_service.dart';
 import '../services/smart_scanner_service.dart';
 import '../theme/kertas_theme.dart';
-import 'batch_camera_screen.dart';
 import 'export_pdf_sheet.dart';
 import 'full_screen_preview_dialog.dart';
+import 'live_scanner_screen.dart';
 import 'pdf_viewer_screen.dart';
 import 'smart_scanner_sheet.dart';
 
@@ -85,7 +85,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
 
       setState(() {
         _isBusyProcessing = true;
-        _busyMessage = 'Memuat ${pickedFiles.length} foto dari galeri...';
+        _busyMessage = 'Mendeteksi tepi & merapikan ${pickedFiles.length} foto dari galeri...';
       });
 
       final List<ScannedPageItem> added = [];
@@ -93,16 +93,23 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
         final file = pickedFiles[i];
         final bytes = await file.readAsBytes();
         final number = _workspacePages.length + added.length + 1;
-        added.add(
-          ScannedPageItem(
-            id: 'gal_${DateTime.now().microsecondsSinceEpoch}_$i',
-            sourceLabel: file.name.isNotEmpty
-                ? file.name
-                : 'Galeri #${number.toString().padLeft(2, '0')}',
-            originalBytes: bytes,
-            displayBytes: bytes,
-          ),
+        final corners = SmartScannerService.detectDocumentCorners(bytes);
+        final rawItem = ScannedPageItem(
+          id: 'gal_${DateTime.now().microsecondsSinceEpoch}_$i',
+          sourceLabel: file.name.isNotEmpty
+              ? file.name
+              : 'Galeri #${number.toString().padLeft(2, '0')}',
+          originalBytes: bytes,
+          displayBytes: bytes,
+          corners: corners,
+          filter: DocumentFilterType.magicColor,
         );
+        final processed = await SmartScannerService.processPage(
+          rawItem,
+          corners: corners,
+          filter: DocumentFilterType.magicColor,
+        );
+        added.add(processed);
       }
 
       if (!mounted) return;
@@ -116,18 +123,18 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
       setState(() {
         _isBusyProcessing = false;
         _errorBannerMessage =
-            'Tidak dapat membuka galeri perangkat: $e. Coba gunakan tombol Kamera atau Muat Lembar Contoh.';
+            'Tidak dapat membuka galeri perangkat: $e. Coba gunakan tombol QuickPDF atau Muat Lembar Contoh.';
       });
     }
   }
 
-  /// Fase 1: Ambil Foto Langsung secara beruntun (Batch Capture)
-  Future<void> _openBatchCamera() async {
+  /// Fitur Utama: Tombol QuickPDF (In-App Live Camera + Auto-Capture Tanpa Tombol Shutter -> Langsung Buat PDF)
+  Future<void> _startQuickPdf() async {
     setState(() => _errorBannerMessage = null);
     final List<ScannedPageItem>? captured =
         await Navigator.of(context).push<List<ScannedPageItem>>(
       MaterialPageRoute(
-        builder: (_) => BatchCameraScreen(
+        builder: (_) => LiveScannerScreen(
           existingPageCount: _workspacePages.length,
         ),
       ),
@@ -137,6 +144,11 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
       setState(() {
         _workspacePages.addAll(captured);
         _activeTab = ActiveTab.workspace;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _workspacePages.isNotEmpty) {
+          _openExportPdfSheet();
+        }
       });
     }
   }
@@ -706,7 +718,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'KertasPDF',
+                    'QuickPDF',
                     style: TextStyle(fontSize: 18.5, fontWeight: FontWeight.w800),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1257,7 +1269,8 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
   }
 
   /// Panel Bawah Ramah Satu Tangan (Thumb-Friendly):
-  /// Menampilkan tombol Kamera & Galeri, serta tombol fokus utama "Buat PDF" saat ada halaman di Workspace.
+  /// Menampilkan tombol Galeri (kiri), tombol utama QuickPDF (tengah, 64px), dan tombol Meja Kerja (kanan),
+  /// serta pintasan "Buat PDF" saat ada halaman di Workspace.
   Widget _buildBottomActionBar(ThemeData theme) {
     final hasPages = _workspacePages.isNotEmpty;
     final estimatedBytes = PdfGeneratorService.estimatePdfSizeBytes(
@@ -1266,7 +1279,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(top: BorderSide(color: theme.dividerColor)),
@@ -1278,8 +1291,12 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
                 onPressed: _openExportPdfSheet,
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
                 label: Text(
                   'Buat PDF (${_workspacePages.length})',
                   style: const TextStyle(fontFeatures: KertasTheme.tabularNums),
@@ -1289,20 +1306,129 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
             const SizedBox(height: 8),
           ],
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Kiri: Galeri (52px)
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _openBatchCamera,
-                  icon: const Icon(Icons.photo_camera_outlined, size: 20),
-                  label: const Text('Kamera'),
+                flex: 3,
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    onPressed: _pickFromGallery,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.photo_library_outlined, size: 18),
+                        SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Galeri',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
+
+              // Tengah: Tombol Utama QuickPDF (64px, Vermilion #D9381E)
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickFromGallery,
-                  icon: const Icon(Icons.photo_library_outlined, size: 20),
-                  label: const Text('Galeri'),
+                flex: 4,
+                child: SizedBox(
+                  height: 64,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: KertasColors.vermilionStamp,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: _startQuickPdf,
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.document_scanner_outlined, size: 20),
+                            SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'QuickPDF',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Auto-Scan',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFFFE4DE),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Kanan: Meja Kerja (52px)
+              Expanded(
+                flex: 3,
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _activeTab = ActiveTab.workspace;
+                      });
+                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.grid_view_rounded, size: 17),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            hasPages
+                                ? 'Meja (${_workspacePages.length})'
+                                : 'Meja Kerja',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: KertasTheme.tabularNums,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
