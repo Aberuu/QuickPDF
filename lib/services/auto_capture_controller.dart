@@ -44,7 +44,9 @@ class AutoCaptureStepResult {
 class AutoCaptureController {
   final double emaAlpha;
   final int lockDurationMs;
+  final double minLockConfidence;
   final double maxStableJitter;
+  final double maxSingleCornerJump;
   final double newSheetCornerShiftThreshold;
   final double newSheetFingerprintDiffThreshold;
   final int noDetectionHintDelayMs;
@@ -61,7 +63,9 @@ class AutoCaptureController {
   AutoCaptureController({
     this.emaAlpha = 0.35,
     this.lockDurationMs = 800,
-    this.maxStableJitter = 0.045,
+    this.minLockConfidence = 0.72,
+    this.maxStableJitter = 0.025,
+    this.maxSingleCornerJump = 0.06,
     this.newSheetCornerShiftThreshold = 0.15,
     this.newSheetFingerprintDiffThreshold = 18.0,
     this.noDetectionHintDelayMs = 5000,
@@ -103,7 +107,7 @@ class AutoCaptureController {
 
     // Evaluasi masa jeda anti-duplikat (cooldown)
     if (_state == ScannerState.cooldown) {
-      if (detection == null) {
+      if (detection == null || detection.confidence < minLockConfidence) {
         _missingFramesInCooldown++;
         if (_missingFramesInCooldown >= 2) {
           // Kertas telah diangkat atau kamera berpindah dari dokumen sebelumnya
@@ -152,8 +156,8 @@ class AutoCaptureController {
       _lockStartMs = nowMs;
     }
 
-    // Jika tidak ada dokumen yang terdeteksi pada frame ini
-    if (detection == null) {
+    // Jika tidak ada dokumen yang terdeteksi atau skor confidence di bawah ambang kunci (0.72)
+    if (detection == null || detection.confidence < minLockConfidence) {
       if (_state != ScannerState.searching) {
         _state = ScannerState.searching;
         _searchingStartMs = nowMs;
@@ -176,10 +180,14 @@ class AutoCaptureController {
       );
     }
 
-    // Dokumen ditemukan: hitung posisi sudut terhalus (EMA) dan kestabilan
+    // Dokumen ber-confidence tinggi ditemukan: hitung posisi sudut terhalus (EMA) dan kestabilan
     final DocumentCorners prevSmoothed = _smoothedCorners ?? detection.corners;
-    final double jitter = _averageCornerDistance(detection.corners, prevSmoothed);
-    final DocumentCorners nextSmoothed = _applyEma(_smoothedCorners, detection.corners);
+    final double jitter =
+        _averageCornerDistance(detection.corners, prevSmoothed);
+    final double singleCornerJump =
+        _maxCornerDistance(detection.corners, prevSmoothed);
+    final DocumentCorners nextSmoothed =
+        _applyEma(_smoothedCorners, detection.corners);
     _smoothedCorners = nextSmoothed;
 
     if (_state != ScannerState.locking || _lockStartMs == null) {
@@ -195,13 +203,17 @@ class AutoCaptureController {
       );
     }
 
-    // Jika tangan/kamera bergoyang melebihi batas toleransi, ulangi penghitung kestabilan
-    if (jitter > maxStableJitter) {
+    // Jika salah satu sudut melompat > 6% akibat pantulan cahaya sesaat atau simpangan > 2.5%,
+    // reset progres penguncian secara instan ke 0.0.
+    if (singleCornerJump > maxSingleCornerJump || jitter > maxStableJitter) {
       _lockStartMs = nowMs;
+      if (singleCornerJump > maxSingleCornerJump) {
+        _smoothedCorners = detection.corners;
+      }
       return AutoCaptureStepResult(
         state: ScannerState.locking,
-        smoothedCorners: nextSmoothed,
-        lockProgress: 0.05,
+        smoothedCorners: _smoothedCorners,
+        lockProgress: 0.0,
         shouldTriggerCapture: false,
         showLowContrastHint: false,
         statusGuidanceText: 'Tahan stabil di atas kertas...',
@@ -276,6 +288,14 @@ class AutoCaptureController {
     final double d3 = (a.bottomRight - b.bottomRight).distance;
     final double d4 = (a.bottomLeft - b.bottomLeft).distance;
     return (d1 + d2 + d3 + d4) * 0.25;
+  }
+
+  static double _maxCornerDistance(DocumentCorners a, DocumentCorners b) {
+    final double d1 = (a.topLeft - b.topLeft).distance;
+    final double d2 = (a.topRight - b.topRight).distance;
+    final double d3 = (a.bottomRight - b.bottomRight).distance;
+    final double d4 = (a.bottomLeft - b.bottomLeft).distance;
+    return math.max(math.max(d1, d2), math.max(d3, d4));
   }
 
   static double _meanAbsoluteDifference(Uint8List a, Uint8List b) {

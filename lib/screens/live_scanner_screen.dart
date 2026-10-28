@@ -1438,14 +1438,18 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                     label: const Text('Pilih Foto dari Galeri'),
                   ),
                 ),
-                const SizedBox(height: 10),
-                TextButton(
-                  onPressed: _startSimulationSensorMode,
-                  child: const Text(
-                    'Coba Simulasi Detektor Otomatis',
-                    style: TextStyle(color: Color(0xFFFDE68A)),
+                if (kIsWeb ||
+                    (defaultTargetPlatform != TargetPlatform.android &&
+                        defaultTargetPlatform != TargetPlatform.iOS)) ...[
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: _startSimulationSensorMode,
+                    child: const Text(
+                      'Coba Simulasi Detektor Otomatis',
+                      style: TextStyle(color: Color(0xFFFDE68A)),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

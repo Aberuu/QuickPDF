@@ -130,5 +130,57 @@ void main() {
       );
       expect(s5.showLowContrastHint, isTrue);
     });
+
+    test('Menolak transisi ke locking jika confidence < 0.72 dan mereset lockProgress ke 0.0 saat satu sudut melompat > 6%', () {
+      final controller = AutoCaptureController(lockDurationMs: 800);
+
+      // 1. Deteksi dengan confidence rendah (0.65 < 0.72) harus tetap di state searching
+      const lowConfDetection = DetectionResult(
+        corners: sampleCorners,
+        areaRatio: 0.50,
+        confidence: 0.65,
+      );
+      final sLow = controller.processFrame(
+        detection: lowConfDetection,
+        frameFingerprint: null,
+        nowMs: 100,
+      );
+      expect(sLow.state, equals(ScannerState.searching));
+      expect(sLow.lockProgress, equals(0.0));
+
+      // 2. Deteksi valid (confidence 0.92 >= 0.72) mulai mengunci hingga progres 50% (t = 500ms)
+      controller.processFrame(
+        detection: sampleDetection,
+        frameFingerprint: null,
+        nowMs: 100,
+      );
+      final sHalf = controller.processFrame(
+        detection: sampleDetection,
+        frameFingerprint: null,
+        nowMs: 500,
+      );
+      expect(sHalf.state, equals(ScannerState.locking));
+      expect(sHalf.lockProgress, closeTo(0.5, 0.05));
+
+      // 3. Satu sudut tiba-tiba melompat > 6% (BR bergeser sejauh 0.08 ke bawah akibat pantulan sesaat)
+      const jumpedDetection = DetectionResult(
+        corners: DocumentCorners(
+          topLeft: ui.Offset(0.10, 0.10),
+          topRight: ui.Offset(0.90, 0.10),
+          bottomRight: ui.Offset(0.90, 0.98),
+          bottomLeft: ui.Offset(0.10, 0.90),
+        ),
+        areaRatio: 0.66,
+        confidence: 0.88,
+      );
+      final sJump = controller.processFrame(
+        detection: jumpedDetection,
+        frameFingerprint: null,
+        nowMs: 650,
+      );
+      expect(sJump.state, equals(ScannerState.locking));
+      expect(sJump.lockProgress, equals(0.0));
+      expect(sJump.shouldTriggerCapture, isFalse);
+    });
   });
 }

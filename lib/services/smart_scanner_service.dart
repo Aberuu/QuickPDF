@@ -21,152 +21,11 @@ class SmartScannerService {
     if (detected != null) {
       return detected.corners;
     }
-
-    final decoded = img.decodeImage(rawBytes);
-    if (decoded == null) {
-      return const DocumentCorners(
-        topLeft: ui.Offset(0.06, 0.06),
-        topRight: ui.Offset(0.94, 0.06),
-        bottomRight: ui.Offset(0.94, 0.94),
-        bottomLeft: ui.Offset(0.06, 0.94),
-      );
-    }
-
-    // Perkecil citra untuk analisis cepat (< 25 ms)
-    final sample = img.copyResize(decoded, width: 160);
-    final w = sample.width;
-    final h = sample.height;
-
-    // Hitung rata-rata luminansi tepi luar (meja/latar belakang) dan bagian tengah (kertas)
-    double borderLumSum = 0;
-    int borderCount = 0;
-    for (int x = 0; x < w; x++) {
-      borderLumSum += _pixelLuminance(sample.getPixel(x, 0));
-      borderLumSum += _pixelLuminance(sample.getPixel(x, h - 1));
-      borderCount += 2;
-    }
-    for (int y = 0; y < h; y++) {
-      borderLumSum += _pixelLuminance(sample.getPixel(0, y));
-      borderLumSum += _pixelLuminance(sample.getPixel(w - 1, y));
-      borderCount += 2;
-    }
-    final borderLum = borderLumSum / math.max(1, borderCount);
-
-    double centerLumSum = 0;
-    int centerCount = 0;
-    for (int y = (h * 0.3).round(); y < (h * 0.7).round(); y++) {
-      for (int x = (w * 0.3).round(); x < (w * 0.7).round(); x++) {
-        centerLumSum += _pixelLuminance(sample.getPixel(x, y));
-        centerCount++;
-      }
-    }
-    final centerLum = centerLumSum / math.max(1, centerCount);
-    final diff = (centerLum - borderLum).abs();
-
-    // Jika foto tidak memiliki kontras latar meja yang jelas, berikan margin rapi 5%
-    if (diff < 18) {
-      return const DocumentCorners(
-        topLeft: ui.Offset(0.05, 0.05),
-        topRight: ui.Offset(0.95, 0.05),
-        bottomRight: ui.Offset(0.95, 0.95),
-        bottomLeft: ui.Offset(0.05, 0.95),
-      );
-    }
-
-    final threshold = (borderLum + centerLum) / 2.0;
-    final paperIsBrighter = centerLum >= borderLum;
-
-    bool isPaper(int x, int y) {
-      final lum = _pixelLuminance(sample.getPixel(x.clamp(0, w - 1), y.clamp(0, h - 1)));
-      return paperIsBrighter ? lum >= threshold : lum <= threshold;
-    }
-
-    // Cari kuadran sudut kertas menggunakan proyeksi diagonal menuju 4 pojok
-    ui.Offset findCornerInQuadrant({
-      required int startX,
-      required int endX,
-      required int stepX,
-      required int startY,
-      required int endY,
-      required int stepY,
-      required ui.Offset fallback,
-    }) {
-      double bestScore = double.infinity;
-      ui.Offset? bestPoint;
-
-      for (int y = startY; y != endY; y += stepY) {
-        for (int x = startX; x != endX; x += stepX) {
-          if (isPaper(x, y)) {
-            // Pastikan titik tetangga juga kertas agar tahan derau
-            int neighbors = 0;
-            for (int dy = -1; dy <= 1; dy++) {
-              for (int dx = -1; dx <= 1; dx++) {
-                if (isPaper(x + dx, y + dy)) neighbors++;
-              }
-            }
-            if (neighbors >= 6) {
-              final distX = (x - startX).abs() / w;
-              final distY = (y - startY).abs() / h;
-              final score = distX + distY;
-              if (score < bestScore) {
-                bestScore = score;
-                bestPoint = ui.Offset(
-                  (x / (w - 1)).clamp(0.02, 0.98),
-                  (y / (h - 1)).clamp(0.02, 0.98),
-                );
-              }
-            }
-          }
-        }
-      }
-      return bestPoint ?? fallback;
-    }
-
-    final midX = w ~/ 2;
-    final midY = h ~/ 2;
-
-    final tl = findCornerInQuadrant(
-      startX: 1,
-      endX: midX,
-      stepX: 1,
-      startY: 1,
-      endY: midY,
-      stepY: 1,
-      fallback: const ui.Offset(0.06, 0.06),
-    );
-    final tr = findCornerInQuadrant(
-      startX: w - 2,
-      endX: midX,
-      stepX: -1,
-      startY: 1,
-      endY: midY,
-      stepY: 1,
-      fallback: const ui.Offset(0.94, 0.06),
-    );
-    final br = findCornerInQuadrant(
-      startX: w - 2,
-      endX: midX,
-      stepX: -1,
-      startY: h - 2,
-      endY: midY,
-      stepY: -1,
-      fallback: const ui.Offset(0.94, 0.94),
-    );
-    final bl = findCornerInQuadrant(
-      startX: 1,
-      endX: midX,
-      stepX: 1,
-      startY: h - 2,
-      endY: midY,
-      stepY: -1,
-      fallback: const ui.Offset(0.06, 0.94),
-    );
-
-    return DocumentCorners(
-      topLeft: tl,
-      topRight: tr,
-      bottomRight: br,
-      bottomLeft: bl,
+    return const DocumentCorners(
+      topLeft: ui.Offset(0.06, 0.06),
+      topRight: ui.Offset(0.94, 0.06),
+      bottomRight: ui.Offset(0.94, 0.94),
+      bottomLeft: ui.Offset(0.06, 0.94),
     );
   }
 
@@ -230,7 +89,7 @@ class SmartScannerService {
     final decoded = img.decodeImage(sourceBytes);
     if (decoded == null) return sourceBytes;
 
-    img.Image working = decoded;
+    img.Image working = img.bakeOrientation(decoded);
     final maxDim = math.max(working.width, working.height);
     if (maxDim > preset.maxDimensionPx) {
       if (working.width >= working.height) {
@@ -255,7 +114,8 @@ class SmartScannerService {
   static Uint8List createHistoryThumbnail(Uint8List sourceBytes) {
     final decoded = img.decodeImage(sourceBytes);
     if (decoded == null) return sourceBytes;
-    final thumb = img.copyResize(decoded, width: 260, interpolation: img.Interpolation.average);
+    final working = img.bakeOrientation(decoded);
+    final thumb = img.copyResize(working, width: 260, interpolation: img.Interpolation.average);
     return Uint8List.fromList(img.encodeJpg(thumb, quality: 72));
   }
 
@@ -430,10 +290,6 @@ class SmartScannerService {
     );
 
     return Uint8List.fromList(img.encodeJpg(canvas, quality: 88));
-  }
-
-  static double _pixelLuminance(img.Pixel p) {
-    return 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
   }
 }
 
