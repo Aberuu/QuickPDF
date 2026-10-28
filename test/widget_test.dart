@@ -158,14 +158,14 @@ void main() {
 
     expect(find.text('QuickPDF Live Scanner'), findsOneWidget);
     expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Original'), findsOneWidget);
+    expect(find.text('B&W'), findsOneWidget);
     expect(find.text('Enhanced'), findsOneWidget);
-    expect(find.text('Hitam Putih'), findsOneWidget);
-    expect(find.text('Foto Asli'), findsOneWidget);
     // Pastikan tombol Galeri terlihat sebelum ada foto yang dipotret
     expect(find.text('Galeri'), findsOneWidget);
 
-    // Ganti filter kamera ke Hitam Putih ala HyperOS
-    await tester.tap(find.text('Hitam Putih'));
+    // Ganti filter kamera ke B&W ala HyperOS
+    await tester.tap(find.text('B&W'));
     await tester.pumpAndSettle();
 
     // Majukan waktu selama ~1,1 detik agar detektor mengunci stabil 0,8 detik dan memotret otomatis

@@ -482,7 +482,8 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
     return _ProcessOutput(bytes: payload.originalBytes, width: 800, height: 1100);
   }
 
-  img.Image working = decoded;
+  // Penting: Putar orientasi EXIF fisik agar piksel gambar selalu potret 1:1 sesuai layar
+  img.Image working = img.bakeOrientation(decoded);
 
   // 1. Koreksi Distorsi & Sudut Perspektif 4 Titik Sudut Ala HyperOS (True Homography Rectification)
   if (!payload.isFullFrame) {
@@ -613,7 +614,7 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
     working = img.copyRotate(working, angle: 270);
   }
 
-  // 3. Terapkan Filter Dokumen Instan Ala HyperOS (Enhanced, Hitam Putih, Foto Asli) & Kontras Manual
+  // 3. Terapkan Filter Dokumen Instan Ala HyperOS (Enhanced, Hitam Putih Sauvola, Foto Asli) & Kontras Manual
   final filter = payload.filterCode;
   final bOffset = (payload.brightnessDelta * 255).round();
   final cFactor = payload.contrastFactor;
@@ -622,132 +623,147 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
     final int imgW = working.width;
     final int imgH = working.height;
 
-    // Estimasi peta latar belakang pencahayaan lokal (grid 24 x 32) untuk mengangkat bayangan
-    const int gridCols = 24;
-    const int gridRows = 32;
-    final List<double> bgGrid = List<double>.filled(gridCols * gridRows, 220.0);
-
-    if (filter == 'magic' || filter == 'bw' || filter == 'gray') {
-      for (int gy = 0; gy < gridRows; gy++) {
-        final int startY = (gy * imgH / gridRows).round();
-        final int endY = ((gy + 1) * imgH / gridRows).round().clamp(startY + 1, imgH);
-        for (int gx = 0; gx < gridCols; gx++) {
-          final int startX = (gx * imgW / gridCols).round();
-          final int endX = ((gx + 1) * imgW / gridCols).round().clamp(startX + 1, imgW);
-
-          double maxL = 0;
-          double sumTop = 0;
-          int countTop = 0;
-          final int stepX = math.max(1, (endX - startX) ~/ 6);
-          final int stepY = math.max(1, (endY - startY) ~/ 6);
-
-          for (int sy = startY; sy < endY; sy += stepY) {
-            for (int sx = startX; sx < endX; sx += stepX) {
-              final p = working.getPixel(sx, sy);
-              final double lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
-              if (lum > maxL) maxL = lum;
-              if (lum > 90) {
-                sumTop += lum;
-                countTop++;
-              }
-            }
-          }
-          final double avgL = countTop > 0 ? (sumTop / countTop) : maxL;
-          bgGrid[gy * gridCols + gx] = math.max(110.0, 0.4 * avgL + 0.6 * maxL);
+    if (filter == 'bw') {
+      // Binarisasi Adaptif Sauvola Presisi Tinggi (O(1) via Integral Image)
+      // T(x, y) = m(x, y) * (1 + k * (s(x, y) / R - 1)), dengan R = 128, k = 0.2, window = 27
+      final Uint8List luma = Uint8List(imgW * imgH);
+      for (int y = 0; y < imgH; y++) {
+        final row = y * imgW;
+        for (int x = 0; x < imgW; x++) {
+          final p = working.getPixel(x, y);
+          luma[row + x] = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round().clamp(0, 255);
         }
       }
-    }
 
-    final double invImgW = 1.0 / math.max(1, imgW - 1);
-    final double invImgH = 1.0 / math.max(1, imgH - 1);
+      final integral = _IntegralImage.fromGrayscale(luma, imgW, imgH);
+      const int radius = 13; // window size = 2 * 13 + 1 = 27
+      const double k = 0.20;
+      const double R = 128.0;
+      final List<double> stats = [0.0, 0.0];
 
-    for (int y = 0; y < working.height; y++) {
-      final double gY = (y * invImgH) * (gridRows - 1);
-      final int gyi = gY.floor().clamp(0, gridRows - 2);
-      final double gYf = gY - gyi;
+      for (int y = 0; y < imgH; y++) {
+        final row = y * imgW;
+        for (int x = 0; x < imgW; x++) {
+          final int val = luma[row + x];
+          integral.getStats(x, y, radius, stats);
+          final double mean = stats[0];
+          final double std = stats[1];
 
-      for (int x = 0; x < working.width; x++) {
-        final p = working.getPixel(x, y);
-        double r = p.r.toDouble();
-        double g = p.g.toDouble();
-        double b = p.b.toDouble();
+          final double threshold = mean * (1.0 + k * ((std / R) - 1.0));
+          double outVal = (val >= threshold) ? 255.0 : 0.0;
 
-        if (filter == 'magic') {
-          // Enhanced: Normalisasi bayangan lokal, putihkan latar kertas, pertajam tinta warna & tulisan
-          final double gX = (x * invImgW) * (gridCols - 1);
-          final int gxi = gX.floor().clamp(0, gridCols - 2);
-          final double gXf = gX - gxi;
-
-          final double b00 = bgGrid[gyi * gridCols + gxi];
-          final double b10 = bgGrid[gyi * gridCols + gxi + 1];
-          final double b01 = bgGrid[(gyi + 1) * gridCols + gxi];
-          final double b11 = bgGrid[(gyi + 1) * gridCols + gxi + 1];
-          final double localBg = (1 - gXf) * (1 - gYf) * b00 +
-              gXf * (1 - gYf) * b10 +
-              (1 - gXf) * gYf * b01 +
-              gXf * gYf * b11;
-
-          final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          final double normLum = (lum / math.max(60.0, localBg)) * 255.0;
-
-          if (normLum >= 195) {
-            // Area kertas: angkat menjadi putih bersih, hapus bayangan tangan/ruangan
-            final double boost = ((normLum - 195) / 60.0).clamp(0.0, 1.0);
-            final double whiteFactor = 255.0 / math.max(70.0, localBg);
-            r = (r * whiteFactor).clamp(0.0, 255.0);
-            g = (g * whiteFactor).clamp(0.0, 255.0);
-            b = (b * whiteFactor).clamp(0.0, 255.0);
-            r = r + (255 - r) * (0.80 * boost);
-            g = g + (255 - g) * (0.80 * boost);
-            b = b + (255 - b) * (0.80 * boost);
-          } else {
-            // Area teks / tinta tulisan / stempel: pertajam kontras warna asli
-            final double inkFactor = (normLum / 195.0).clamp(0.0, 1.0);
-            r = (r * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
-            g = (g * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
-            b = (b * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
+          if (bOffset != 0 || (cFactor - 1.0).abs() > 0.01) {
+            outVal = ((outVal - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
           }
-        } else if (filter == 'bw') {
-          // Hitam Putih: Binarisasi adaptif ala fotokopi presisi tinggi
-          final double gX = (x * invImgW) * (gridCols - 1);
-          final int gxi = gX.floor().clamp(0, gridCols - 2);
-          final double gXf = gX - gxi;
 
-          final double b00 = bgGrid[gyi * gridCols + gxi];
-          final double b10 = bgGrid[gyi * gridCols + gxi + 1];
-          final double b01 = bgGrid[(gyi + 1) * gridCols + gxi];
-          final double b11 = bgGrid[(gyi + 1) * gridCols + gxi + 1];
-          final double localBg = (1 - gXf) * (1 - gYf) * b00 +
-              gXf * (1 - gYf) * b10 +
-              (1 - gXf) * gYf * b01 +
-              gXf * gYf * b11;
-
-          final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          final double normLum = (lum / math.max(60.0, localBg)) * 255.0;
-
-          final double val = normLum >= 182
-              ? 255.0
-              : ((normLum / 182.0) * 45.0 + 15.0).clamp(15.0, 60.0);
-          r = val;
-          g = val;
-          b = val;
-        } else if (filter == 'gray') {
-          // Skala Abu-abu Tajam
-          final lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          final stretched = ((lum - 128) * 1.28 + 134).clamp(0.0, 255.0);
-          r = stretched;
-          g = stretched;
-          b = stretched;
+          final int rounded = outVal.round().clamp(0, 255);
+          working.setPixelRgb(x, y, rounded, rounded, rounded);
         }
+      }
+    } else {
+      // Estimasi peta latar belakang pencahayaan lokal (grid 24 x 32) untuk mengangkat bayangan
+      const int gridCols = 24;
+      const int gridRows = 32;
+      final List<double> bgGrid = List<double>.filled(gridCols * gridRows, 220.0);
 
-        // Penyesuaian manual kecerahan & kontras jika disetel pengguna
-        if (bOffset != 0 || (cFactor - 1.0).abs() > 0.01) {
-          r = ((r - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
-          g = ((g - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
-          b = ((b - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+      if (filter == 'magic' || filter == 'gray') {
+        for (int gy = 0; gy < gridRows; gy++) {
+          final int startY = (gy * imgH / gridRows).round();
+          final int endY = ((gy + 1) * imgH / gridRows).round().clamp(startY + 1, imgH);
+          for (int gx = 0; gx < gridCols; gx++) {
+            final int startX = (gx * imgW / gridCols).round();
+            final int endX = ((gx + 1) * imgW / gridCols).round().clamp(startX + 1, imgW);
+
+            double maxL = 0;
+            double sumTop = 0;
+            int countTop = 0;
+            final int stepX = math.max(1, (endX - startX) ~/ 6);
+            final int stepY = math.max(1, (endY - startY) ~/ 6);
+
+            for (int sy = startY; sy < endY; sy += stepY) {
+              for (int sx = startX; sx < endX; sx += stepX) {
+                final p = working.getPixel(sx, sy);
+                final double lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+                if (lum > maxL) maxL = lum;
+                if (lum > 90) {
+                  sumTop += lum;
+                  countTop++;
+                }
+              }
+            }
+            final double avgL = countTop > 0 ? (sumTop / countTop) : maxL;
+            bgGrid[gy * gridCols + gx] = math.max(110.0, 0.4 * avgL + 0.6 * maxL);
+          }
         }
+      }
 
-        working.setPixelRgb(x, y, r.round().clamp(0, 255), g.round().clamp(0, 255), b.round().clamp(0, 255));
+      final double invImgW = 1.0 / math.max(1, imgW - 1);
+      final double invImgH = 1.0 / math.max(1, imgH - 1);
+
+      for (int y = 0; y < working.height; y++) {
+        final double gY = (y * invImgH) * (gridRows - 1);
+        final int gyi = gY.floor().clamp(0, gridRows - 2);
+        final double gYf = gY - gyi;
+
+        for (int x = 0; x < working.width; x++) {
+          final p = working.getPixel(x, y);
+          double r = p.r.toDouble();
+          double g = p.g.toDouble();
+          double b = p.b.toDouble();
+
+          if (filter == 'magic') {
+            // Enhanced: Normalisasi bayangan lokal, putihkan latar kertas, pertajam tinta warna & tulisan
+            final double gX = (x * invImgW) * (gridCols - 1);
+            final int gxi = gX.floor().clamp(0, gridCols - 2);
+            final double gXf = gX - gxi;
+
+            final double b00 = bgGrid[gyi * gridCols + gxi];
+            final double b10 = bgGrid[gyi * gridCols + gxi + 1];
+            final double b01 = bgGrid[(gyi + 1) * gridCols + gxi];
+            final double b11 = bgGrid[(gyi + 1) * gridCols + gxi + 1];
+            final double localBg = (1 - gXf) * (1 - gYf) * b00 +
+                gXf * (1 - gYf) * b10 +
+                (1 - gXf) * gYf * b01 +
+                gXf * gYf * b11;
+
+            final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            final double normLum = (lum / math.max(60.0, localBg)) * 255.0;
+
+            if (normLum >= 195) {
+              // Area kertas: angkat menjadi putih bersih, hapus bayangan tangan/ruangan
+              final double boost = ((normLum - 195) / 60.0).clamp(0.0, 1.0);
+              final double whiteFactor = 255.0 / math.max(70.0, localBg);
+              r = (r * whiteFactor).clamp(0.0, 255.0);
+              g = (g * whiteFactor).clamp(0.0, 255.0);
+              b = (b * whiteFactor).clamp(0.0, 255.0);
+              r = r + (255 - r) * (0.80 * boost);
+              g = g + (255 - g) * (0.80 * boost);
+              b = b + (255 - b) * (0.80 * boost);
+            } else {
+              // Area teks / tinta tulisan / stempel: pertajam kontras warna asli
+              final double inkFactor = (normLum / 195.0).clamp(0.0, 1.0);
+              r = (r * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
+              g = (g * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
+              b = (b * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
+            }
+          } else if (filter == 'gray') {
+            // Skala Abu-abu Tajam
+            final lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            final stretched = ((lum - 128) * 1.28 + 134).clamp(0.0, 255.0);
+            r = stretched;
+            g = stretched;
+            b = stretched;
+          }
+
+          // Penyesuaian manual kecerahan & kontras jika disetel pengguna
+          if (bOffset != 0 || (cFactor - 1.0).abs() > 0.01) {
+            r = ((r - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+            g = ((g - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+            b = ((b - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+          }
+
+          working.setPixelRgb(x, y, r.round().clamp(0, 255), g.round().clamp(0, 255), b.round().clamp(0, 255));
+        }
       }
     }
   }
@@ -758,4 +774,66 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
     width: working.width,
     height: working.height,
   );
+}
+
+/// Citra Integral (Summed-Area Table) untuk komputasi rerata & deviasi standar lokal dalam O(1).
+/// Digunakan oleh algoritma Sauvola Adaptive Binarization untuk dokumen fotokopi & teks tajam.
+class _IntegralImage {
+  final int width;
+  final int height;
+  final Float64List sum;
+  final Float64List sqrSum;
+
+  _IntegralImage(this.width, this.height)
+      : sum = Float64List((width + 1) * (height + 1)),
+        sqrSum = Float64List((width + 1) * (height + 1));
+
+  static _IntegralImage fromGrayscale(Uint8List gray, int width, int height) {
+    final sat = _IntegralImage(width, height);
+    final stride = width + 1;
+    for (int y = 0; y < height; y++) {
+      double rowSum = 0;
+      double rowSqrSum = 0;
+      final srcRowOffset = y * width;
+      final satRowOffset = (y + 1) * stride;
+      final prevSatRowOffset = y * stride;
+      for (int x = 0; x < width; x++) {
+        final val = gray[srcRowOffset + x].toDouble();
+        rowSum += val;
+        rowSqrSum += val * val;
+        sat.sum[satRowOffset + x + 1] = sat.sum[prevSatRowOffset + x + 1] + rowSum;
+        sat.sqrSum[satRowOffset + x + 1] = sat.sqrSum[prevSatRowOffset + x + 1] + rowSqrSum;
+      }
+    }
+    return sat;
+  }
+
+  /// Menghitung rerata (mean) dan deviasi standar (std) dalam jendela [x - r, x + r] x [y - r, y + r]
+  void getStats(int x, int y, int radius, List<double> outStats) {
+    final x0 = (x - radius).clamp(0, width);
+    final x1 = (x + radius + 1).clamp(0, width);
+    final y0 = (y - radius).clamp(0, height);
+    final y1 = (y + radius + 1).clamp(0, height);
+
+    final count = (x1 - x0) * (y1 - y0);
+    if (count <= 0) {
+      outStats[0] = 0.0;
+      outStats[1] = 0.0;
+      return;
+    }
+
+    final stride = width + 1;
+    final idxA = y0 * stride + x0;
+    final idxB = y0 * stride + x1;
+    final idxC = y1 * stride + x0;
+    final idxD = y1 * stride + x1;
+
+    final total = sum[idxD] - sum[idxB] - sum[idxC] + sum[idxA];
+    final totalSqr = sqrSum[idxD] - sqrSum[idxB] - sqrSum[idxC] + sqrSum[idxA];
+
+    final mean = total / count;
+    final variance = math.max(0.0, (totalSqr / count) - (mean * mean));
+    outStats[0] = mean;
+    outStats[1] = math.sqrt(variance);
+  }
 }

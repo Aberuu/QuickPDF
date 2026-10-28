@@ -381,10 +381,6 @@ class _InteractivePerspectiveCropperState
         }
 
         Offset toPx(Offset norm) => Offset(norm.dx * boxW, norm.dy * boxH);
-        Offset toNorm(Offset px) => Offset(
-              (px.dx / boxW).clamp(0.02, 0.98),
-              (px.dy / boxH).clamp(0.02, 0.98),
-            );
 
         final tlPx = toPx(widget.corners.topLeft);
         final trPx = toPx(widget.corners.topRight);
@@ -415,11 +411,7 @@ class _InteractivePerspectiveCropperState
               _buildCornerHandle(
                 pos: tlPx,
                 onDragStart: () => setState(() => _activeDragPx = tlPx),
-                onDragUpdate: (delta) {
-                  final next = toNorm(toPx(widget.corners.topLeft) + delta);
-                  widget.onCornersChanged(widget.corners.copyWith(topLeft: next));
-                  setState(() => _activeDragPx = toPx(next));
-                },
+                onDragUpdate: (delta) => _updateCorner(0, delta, boxW, boxH),
                 onDragEnd: () {
                   setState(() => _activeDragPx = null);
                   widget.onDragEnd();
@@ -428,11 +420,7 @@ class _InteractivePerspectiveCropperState
               _buildCornerHandle(
                 pos: trPx,
                 onDragStart: () => setState(() => _activeDragPx = trPx),
-                onDragUpdate: (delta) {
-                  final next = toNorm(toPx(widget.corners.topRight) + delta);
-                  widget.onCornersChanged(widget.corners.copyWith(topRight: next));
-                  setState(() => _activeDragPx = toPx(next));
-                },
+                onDragUpdate: (delta) => _updateCorner(1, delta, boxW, boxH),
                 onDragEnd: () {
                   setState(() => _activeDragPx = null);
                   widget.onDragEnd();
@@ -441,11 +429,7 @@ class _InteractivePerspectiveCropperState
               _buildCornerHandle(
                 pos: brPx,
                 onDragStart: () => setState(() => _activeDragPx = brPx),
-                onDragUpdate: (delta) {
-                  final next = toNorm(toPx(widget.corners.bottomRight) + delta);
-                  widget.onCornersChanged(widget.corners.copyWith(bottomRight: next));
-                  setState(() => _activeDragPx = toPx(next));
-                },
+                onDragUpdate: (delta) => _updateCorner(2, delta, boxW, boxH),
                 onDragEnd: () {
                   setState(() => _activeDragPx = null);
                   widget.onDragEnd();
@@ -454,11 +438,7 @@ class _InteractivePerspectiveCropperState
               _buildCornerHandle(
                 pos: blPx,
                 onDragStart: () => setState(() => _activeDragPx = blPx),
-                onDragUpdate: (delta) {
-                  final next = toNorm(toPx(widget.corners.bottomLeft) + delta);
-                  widget.onCornersChanged(widget.corners.copyWith(bottomLeft: next));
-                  setState(() => _activeDragPx = toPx(next));
-                },
+                onDragUpdate: (delta) => _updateCorner(3, delta, boxW, boxH),
                 onDragEnd: () {
                   setState(() => _activeDragPx = null);
                   widget.onDragEnd();
@@ -475,35 +455,117 @@ class _InteractivePerspectiveCropperState
     );
   }
 
+  /// Memvalidasi konveksitas poligon (Cross Product 2D > 0) dan jarak minimum antar titik (d_min = 40 px)
+  bool _isConvexAndSeparated(Offset tl, Offset tr, Offset br, Offset bl) {
+    const double minDistance = 40.0;
+    if ((tr - tl).distance < minDistance ||
+        (br - tr).distance < minDistance ||
+        (bl - br).distance < minDistance ||
+        (tl - bl).distance < minDistance ||
+        (br - tl).distance < minDistance ||
+        (bl - tr).distance < minDistance) {
+      return false;
+    }
+
+    double cross(Offset a, Offset b, Offset c) {
+      return (b.dx - a.dx) * (c.dy - a.dy) - (b.dy - a.dy) * (c.dx - a.dx);
+    }
+
+    final c1 = cross(tl, tr, br);
+    final c2 = cross(tr, br, bl);
+    final c3 = cross(br, bl, tl);
+    final c4 = cross(bl, tl, tr);
+
+    final bool allPos = c1 > 1e-4 && c2 > 1e-4 && c3 > 1e-4 && c4 > 1e-4;
+    final bool allNeg = c1 < -1e-4 && c2 < -1e-4 && c3 < -1e-4 && c4 < -1e-4;
+    return allPos || allNeg;
+  }
+
+  /// Menggeser satu sudut dengan penjagaan konveksitas dan batas aman (clamping)
+  void _updateCorner(int cornerIndex, Offset delta, double boxW, double boxH) {
+    Offset toPx(Offset norm) => Offset(norm.dx * boxW, norm.dy * boxH);
+    Offset toNorm(Offset px) => Offset(
+      (px.dx / boxW).clamp(0.01, 0.99),
+      (px.dy / boxH).clamp(0.01, 0.99),
+    );
+
+    final tl = toPx(widget.corners.topLeft);
+    final tr = toPx(widget.corners.topRight);
+    final br = toPx(widget.corners.bottomRight);
+    final bl = toPx(widget.corners.bottomLeft);
+
+    Offset candidate;
+    switch (cornerIndex) {
+      case 0:
+        candidate = tl + delta;
+        candidate = Offset(candidate.dx.clamp(0.0, boxW), candidate.dy.clamp(0.0, boxH));
+        if (_isConvexAndSeparated(candidate, tr, br, bl)) {
+          final nextNorm = toNorm(candidate);
+          widget.onCornersChanged(widget.corners.copyWith(topLeft: nextNorm));
+          setState(() => _activeDragPx = candidate);
+        }
+        break;
+      case 1:
+        candidate = tr + delta;
+        candidate = Offset(candidate.dx.clamp(0.0, boxW), candidate.dy.clamp(0.0, boxH));
+        if (_isConvexAndSeparated(tl, candidate, br, bl)) {
+          final nextNorm = toNorm(candidate);
+          widget.onCornersChanged(widget.corners.copyWith(topRight: nextNorm));
+          setState(() => _activeDragPx = candidate);
+        }
+        break;
+      case 2:
+        candidate = br + delta;
+        candidate = Offset(candidate.dx.clamp(0.0, boxW), candidate.dy.clamp(0.0, boxH));
+        if (_isConvexAndSeparated(tl, tr, candidate, bl)) {
+          final nextNorm = toNorm(candidate);
+          widget.onCornersChanged(widget.corners.copyWith(bottomRight: nextNorm));
+          setState(() => _activeDragPx = candidate);
+        }
+        break;
+      case 3:
+        candidate = bl + delta;
+        candidate = Offset(candidate.dx.clamp(0.0, boxW), candidate.dy.clamp(0.0, boxH));
+        if (_isConvexAndSeparated(tl, tr, br, candidate)) {
+          final nextNorm = toNorm(candidate);
+          widget.onCornersChanged(widget.corners.copyWith(bottomLeft: nextNorm));
+          setState(() => _activeDragPx = candidate);
+        }
+        break;
+    }
+  }
+
   Widget _buildCornerHandle({
     required Offset pos,
     required VoidCallback onDragStart,
     required ValueChanged<Offset> onDragUpdate,
     required VoidCallback onDragEnd,
   }) {
-    const double handleSize = 40;
+    // Area sentuh luas R_touch = 36 dp (lebar total 72 dp) untuk kenyamanan jari
+    const double touchAreaSize = 72.0;
     return Positioned(
-      left: pos.dx - handleSize / 2,
-      top: pos.dy - handleSize / 2,
+      left: pos.dx - touchAreaSize / 2,
+      top: pos.dy - touchAreaSize / 2,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onPanStart: (_) => onDragStart(),
         onPanUpdate: (details) => onDragUpdate(details.delta),
         onPanEnd: (_) => onDragEnd(),
         onPanCancel: onDragEnd,
         child: Container(
-          width: handleSize,
-          height: handleSize,
+          width: touchAreaSize,
+          height: touchAreaSize,
           alignment: Alignment.center,
           color: Colors.transparent,
           child: Container(
-            width: 22,
-            height: 22,
+            width: 24,
+            height: 24,
             decoration: BoxDecoration(
-              color: KertasColors.vermilion,
+              color: const Color(0xFFFFD000), // Golden-amber HyperOS
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2.8),
               boxShadow: const [
-                BoxShadow(color: Colors.black45, blurRadius: 4),
+                BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1)),
               ],
             ),
           ),
@@ -624,9 +686,9 @@ class _QuadCropPainter extends CustomPainter {
     canvas.drawPath(
       quadPath,
       Paint()
-        ..color = KertasColors.vermilion
+        ..color = const Color(0xFFFFD000)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5,
+        ..strokeWidth = 2.2,
     );
   }
 

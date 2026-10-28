@@ -308,9 +308,9 @@ class DocumentDetector {
       return opened;
     }
 
-    // Pangkas tonjolan samping/atas/bawah yang ketebalannya kurang dari 52% badan utama kertas
-    final int minColSupport = (maxCol * 0.52).round();
-    final int minRowSupport = (maxRow * 0.52).round();
+    // Pangkas tonjolan samping/atas/bawah yang ketebalannya kurang dari 48% badan utama kertas
+    final int minColSupport = (maxCol * 0.48).round();
+    final int minRowSupport = (maxRow * 0.48).round();
 
     final Uint8List pruned = Uint8List(w * h);
     for (int y = 0; y < h; y++) {
@@ -588,9 +588,9 @@ class DocumentDetector {
       perimeter += (b - a).distance;
     }
 
-    // Sederhanakan poligon tertutup dengan RDP
+    // Sederhanakan poligon tertutup dengan RDP (Douglas-Peucker)
     List<ui.Offset> candidate = normHull;
-    for (double epsFactor = 0.015; epsFactor <= 0.06; epsFactor += 0.008) {
+    for (double epsFactor = 0.02; epsFactor <= 0.08; epsFactor += 0.008) {
       final simplified = _rdpClosedPolygon(normHull, epsFactor * perimeter);
       if (simplified.length == 4) {
         candidate = simplified;
@@ -600,6 +600,11 @@ class DocumentDetector {
       }
     }
 
+    if (candidate.length == 4) {
+      return orderPoints(candidate);
+    }
+
+    // Ekstraksi 4 titik sudut menggunakan order_points berdasar sum (x+y) dan diff (y-x)
     ui.Offset tl = candidate.first;
     ui.Offset tr = candidate.first;
     ui.Offset br = candidate.first;
@@ -607,12 +612,12 @@ class DocumentDetector {
 
     double minSum = double.infinity;
     double maxSum = -double.infinity;
-    double maxDiff = -double.infinity;
     double minDiff = double.infinity;
+    double maxDiff = -double.infinity;
 
     for (final pt in candidate) {
       final double sum = pt.dx + pt.dy;
-      final double diff = pt.dx - pt.dy;
+      final double diff = pt.dy - pt.dx; // diff = y - x sesuai algoritma OpenCV
 
       if (sum < minSum) {
         minSum = sum;
@@ -622,17 +627,50 @@ class DocumentDetector {
         maxSum = sum;
         br = pt;
       }
-      if (diff > maxDiff) {
-        maxDiff = diff;
-        tr = pt;
-      }
       if (diff < minDiff) {
         minDiff = diff;
+        tr = pt;
+      }
+      if (diff > maxDiff) {
+        maxDiff = diff;
         bl = pt;
       }
     }
 
-    return [tl, tr, br, bl];
+    return orderPoints([tl, tr, br, bl]);
+  }
+
+  /// Mengurutkan 4 titik sudut secara konsisten: [TL, TR, BR, BL]
+  /// menggunakan centroid dan sudut polar searah jarum jam untuk mencegah poligon menyilang.
+  static List<ui.Offset> orderPoints(List<ui.Offset> pts) {
+    if (pts.length != 4) return pts;
+
+    final double cx = (pts[0].dx + pts[1].dx + pts[2].dx + pts[3].dx) * 0.25;
+    final double cy = (pts[0].dy + pts[1].dy + pts[2].dy + pts[3].dy) * 0.25;
+
+    final List<ui.Offset> sorted = List<ui.Offset>.from(pts)
+      ..sort((a, b) {
+        final double angleA = math.atan2(a.dy - cy, a.dx - cx);
+        final double angleB = math.atan2(b.dy - cy, b.dx - cx);
+        return angleA.compareTo(angleB);
+      });
+
+    int tlIdx = 0;
+    double minSum = double.infinity;
+    for (int i = 0; i < 4; i++) {
+      final double s = sorted[i].dx + sorted[i].dy;
+      if (s < minSum) {
+        minSum = s;
+        tlIdx = i;
+      }
+    }
+
+    return [
+      sorted[tlIdx],
+      sorted[(tlIdx + 1) % 4],
+      sorted[(tlIdx + 2) % 4],
+      sorted[(tlIdx + 3) % 4],
+    ];
   }
 
   static List<ui.Offset> _rdpClosedPolygon(
@@ -754,14 +792,14 @@ class DocumentDetector {
       }
     }
 
-    // Validasi rasio aspek wajar lembaran kertas (antara 0.42 s.d. 2.2)
+    // Validasi rasio aspek wajar lembaran kertas (antara 0.35 s.d. 2.8)
     final double avgWidth =
         ((tr - tl).distance + (br - bl).distance) * 0.5;
     final double avgHeight =
         ((bl - tl).distance + (br - tr).distance) * 0.5;
     if (avgHeight < 1e-4) return false;
     final double aspect = avgWidth / avgHeight;
-    if (aspect < 0.42 || aspect > 2.2) {
+    if (aspect < 0.35 || aspect > 2.8) {
       return false;
     }
 

@@ -52,6 +52,9 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
   bool _isCapturingPhoto = false;
   String? _cameraErrorText;
   DocumentFilterType _activeFilter = DocumentFilterType.magicColor;
+  double _currentZoom = 1.0;
+  double _minZoom = 1.0;
+  double _maxZoom = 4.0;
 
   // State hasil deteksi real-time
   ScannerState _scannerState = ScannerState.searching;
@@ -142,14 +145,26 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
         return;
       }
 
+      final bool isMobile = !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
+
       if (_cameras.isEmpty || cameraIndex == null) {
         _cameras = await availableCameras().timeout(
-          const Duration(milliseconds: 2200),
+          const Duration(milliseconds: 4500),
           onTimeout: () => const <CameraDescription>[],
         );
       }
 
       if (_cameras.isEmpty) {
+        if (isMobile) {
+          setState(() {
+            _isInitializingCamera = false;
+            _cameraErrorText =
+                'Kamera tidak ditemukan pada perangkat Anda. Silakan muat ulang atau pilih dari galeri.';
+          });
+          return;
+        }
         await _startSimulationSensorMode();
         return;
       }
@@ -184,11 +199,17 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
 
-      await controller.initialize().timeout(const Duration(seconds: 5));
+      await controller.initialize().timeout(const Duration(seconds: 6));
       if (!mounted) {
         await controller.dispose();
         return;
       }
+
+      try {
+        _minZoom = await controller.getMinZoomLevel();
+        _maxZoom = await controller.getMaxZoomLevel();
+        _currentZoom = 1.0.clamp(_minZoom, _maxZoom);
+      } catch (_) {}
 
       _cameraController = controller;
       _isUsingSimulationFallback = false;
@@ -207,6 +228,10 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           code.contains('permission') ||
           code.contains('denied');
 
+      final bool isMobile = !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
+
       if (isDenied) {
         setState(() {
           _isInitializingCamera = false;
@@ -214,13 +239,44 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           _cameraErrorText =
               'Izin kamera ditolak. Berikan izin kamera agar QuickPDF dapat mendeteksi dan memotret dokumen.';
         });
+      } else if (isMobile) {
+        setState(() {
+          _isInitializingCamera = false;
+          _cameraErrorText =
+              'Gagal membuka kamera: ${e.description ?? e.code}. Silakan ketuk Coba Lagi atau gunakan galeri.';
+        });
       } else {
         await _startSimulationSensorMode();
       }
     } catch (_) {
       if (!mounted) return;
+      final bool isMobile = !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
+      if (isMobile) {
+        setState(() {
+          _isInitializingCamera = false;
+          _cameraErrorText =
+              'Terjadi kendala saat memuat kamera. Silakan ketuk Coba Lagi atau gunakan galeri.';
+        });
+        return;
+      }
       await _startSimulationSensorMode();
     }
+  }
+
+  /// Mengatur tingkat perbesaran lensa kamera (0.6x, 1x, 2x)
+  Future<void> _setZoomLevel(double targetZoom) async {
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+    try {
+      final clamped = targetZoom.clamp(_minZoom, _maxZoom);
+      await controller.setZoomLevel(clamped);
+      if (mounted) {
+        setState(() => _currentZoom = clamped);
+        HapticFeedback.selectionClick();
+      }
+    } catch (_) {}
   }
 
   /// Mengaktifkan atau menonaktifkan fitur Auto-Scan secara manual.
@@ -1085,11 +1141,12 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                 Expanded(
                   child: _isPermissionDenied
                       ? _buildPermissionDeniedView()
-                      : _isInitializingCamera
-                          ? _buildLoadingCameraView()
-                          : _buildLiveViewfinderArea(),
+                      : _cameraErrorText != null
+                          ? _buildCameraErrorView()
+                          : _isInitializingCamera
+                              ? _buildLoadingCameraView()
+                              : _buildLiveViewfinderArea(),
                 ),
-                _buildHyperOsFilterSelectorBar(),
                 _buildBottomAutoScannerBar(),
               ],
             ),
@@ -1246,6 +1303,80 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     );
   }
 
+  Widget _buildCameraErrorView() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F1E1B),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.videocam_off_outlined,
+                  color: Color(0xFFFBBF24),
+                  size: 44,
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Kamera Mengalami Kendala',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _cameraErrorText ?? 'Tidak dapat menginisialisasi kamera.',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13.5),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: KertasColors.vermilionStamp,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: () => _initializeLiveCamera(),
+                    icon: const Icon(Icons.refresh_outlined, size: 19),
+                    label: const Text('Coba Lagi'),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: const Color(0xFF232220),
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white38),
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: _pickFallbackFromGallery,
+                    icon: const Icon(Icons.photo_library_outlined, size: 19),
+                    label: const Text('Pilih Foto dari Galeri'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPermissionDeniedView() {
     return Center(
       child: SingleChildScrollView(
@@ -1335,16 +1466,16 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isLockedOrLocking
-              ? KertasColors.successGreen
+              ? const Color(0xFFFFD000)
               : Colors.white.withValues(alpha: 0.18),
-          width: isLockedOrLocking ? 2.2 : 1.0,
+          width: isLockedOrLocking ? 2.0 : 1.0,
         ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Umpan Kamera Langsung (Disesuaikan dengan BoxFit.cover agar koordinat poligon 1:1)
+          // 1. Umpan Kamera Langsung (Disesuaikan dengan BoxFit.cover)
           if (!_isUsingSimulationFallback &&
               _cameraController != null &&
               _cameraController!.value.isInitialized)
@@ -1352,7 +1483,10 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           else
             _buildSimulationScenePreview(),
 
-          // Overlay Poligon 4 Sudut Dokumen Real-Time
+          // 2. Garis Kisi 3x3 (Rule of Thirds) ala Xiaomi HyperOS Camera
+          const CustomPaint(painter: _CameraGridPainter()),
+
+          // 3. Overlay Poligon 4 Sudut Dokumen Real-Time (Warna Golden-Amber #FFD000)
           if (_smoothedCorners != null)
             CustomPaint(
               painter: _LiveDocumentPolygonPainter(
@@ -1363,20 +1497,28 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
               ),
             ),
 
-          // Pill Status Panduan di Bagian Atas Viewfinder
+          // 4. Floating Capsule Opsi Filter ala Xiaomi HyperOS Document Mode di bagian atas
           Positioned(
             top: 14,
-            left: 14,
-            right: 14,
+            left: 16,
+            right: 16,
+            child: _buildFloatingFilterCapsule(),
+          ),
+
+          // 5. Pill Status Panduan Pemindaian di bawah kapsul filter
+          Positioned(
+            top: 60,
+            left: 20,
+            right: 20,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.76),
-                  borderRadius: BorderRadius.circular(24),
+                  color: Colors.black.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isLockedOrLocking
-                        ? const Color(0xFF4ADE80)
+                        ? const Color(0xFFFFD000)
                         : Colors.white24,
                   ),
                 ),
@@ -1391,21 +1533,18 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                               : isLockedOrLocking
                                   ? Icons.center_focus_strong
                                   : Icons.crop_free,
-                      size: 17,
-                      color: !_isAutoScanEnabled
-                          ? const Color(0xFFFDE68A)
-                          : _scannerState == ScannerState.cooldown ||
-                                  isLockedOrLocking
-                              ? const Color(0xFF4ADE80)
-                              : const Color(0xFFFACC15),
+                      size: 15,
+                      color: isLockedOrLocking
+                          ? const Color(0xFFFFD000)
+                          : const Color(0xFFFDE68A),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Flexible(
                       child: Text(
                         _guidanceText,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 12.5,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                         textAlign: TextAlign.center,
@@ -1416,6 +1555,14 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                 ),
               ),
             ),
+          ),
+
+          // 6. Floating Zoom Level Selector [0.6 | 1x | 2] di bagian bawah viewfinder
+          Positioned(
+            bottom: 14,
+            left: 0,
+            right: 0,
+            child: Center(child: _buildZoomCapsule()),
           ),
 
           // Tombol Simulasi Ganti Lembar di Pojok Kanan Bawah Viewfinder (Saat Mode Simulasi)
@@ -1447,30 +1594,30 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
               ),
             ),
 
-          // Petunjuk Kontras Rendah + Tombol Fallback Galeri jika > 5 detik belum mendeteksi kertas
+          // Petunjuk Kontras Rendah + Tombol Beralih ke Mode Manual
           if (_showLowContrastHint && _isAutoScanEnabled)
             Positioned(
-              bottom: 14,
+              bottom: 56,
               left: 16,
               right: 16,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.82),
+                  color: Colors.black.withValues(alpha: 0.86),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFF59E0B)),
+                  border: Border.all(color: const Color(0xFFFFD000)),
                 ),
                 child: Row(
                   children: [
                     const Icon(
                       Icons.lightbulb_outline,
-                      color: Color(0xFFFBBF24),
+                      color: Color(0xFFFFD000),
                       size: 20,
                     ),
                     const SizedBox(width: 10),
                     const Expanded(
                       child: Text(
-                        'Sulit mendeteksi tepi? Coba beralih ke Mode Manual atau pilih dari Galeri.',
+                        'Pencahayaan redup? Anda dapat beralih ke Mode Manual atau pilih dari Galeri.',
                         style: TextStyle(color: Colors.white, fontSize: 12),
                       ),
                     ),
@@ -1480,7 +1627,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                       child: const Text(
                         'Mode Manual',
                         style: TextStyle(
-                          color: Color(0xFFFDE68A),
+                          color: Color(0xFFFFD000),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1490,6 +1637,106 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Floating Capsule Opsi Filter ala Xiaomi HyperOS Document Mode:
+  /// [Original | B&W | Enhanced]
+  Widget _buildFloatingFilterCapsule() {
+    final List<(DocumentFilterType, String)> options = [
+      (DocumentFilterType.original, 'Original'),
+      (DocumentFilterType.blackAndWhite, 'B&W'),
+      (DocumentFilterType.magicColor, 'Enhanced'),
+    ];
+
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.58),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white12),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: options.map((opt) {
+              final isSelected = _activeFilter == opt.$1;
+              return GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() {
+                    _activeFilter = opt.$1;
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.white : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    opt.$2,
+                    style: TextStyle(
+                      color: isSelected ? const Color(0xFF141311) : Colors.white70,
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Floating Zoom Level Selector [0.6 | 1x | 2]
+  Widget _buildZoomCapsule() {
+    final List<(double, String)> zoomOptions = [
+      (0.6, '0.6'),
+      (1.0, '1x'),
+      (2.0, '2'),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: zoomOptions.map((opt) {
+          final isSelected = (_currentZoom - opt.$1).abs() < 0.25;
+          return GestureDetector(
+            onTap: () => _setZoomLevel(opt.$1),
+            child: Container(
+              width: 38,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected
+                    ? const Color(0xFFFFD000)
+                    : Colors.transparent,
+              ),
+              child: Text(
+                opt.$2,
+                style: TextStyle(
+                  color: isSelected ? Colors.black : Colors.white,
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -1539,81 +1786,10 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     );
   }
 
-  /// Bilah Opsi Filter Langsung ala Xiaomi HyperOS Document Mode:
-  /// [Enhanced (Ditingkatkan) | Hitam Putih | Foto Asli]
-  Widget _buildHyperOsFilterSelectorBar() {
-    final List<(DocumentFilterType, String, IconData)> filterOptions = [
-      (DocumentFilterType.magicColor, 'Enhanced', Icons.auto_fix_high),
-      (DocumentFilterType.blackAndWhite, 'Hitam Putih', Icons.filter_b_and_w),
-      (DocumentFilterType.original, 'Foto Asli', Icons.image_outlined),
-    ];
-
-    return Container(
-      color: const Color(0xFF141311),
-      padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
-      child: Center(
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1E1B),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white12),
-          ),
-          padding: const EdgeInsets.all(3),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: filterOptions.map((opt) {
-                final isSelected = _activeFilter == opt.$1;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _activeFilter = opt.$1;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? KertasColors.vermilionStamp
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          opt.$3,
-                          size: 15,
-                          color: isSelected ? Colors.white : Colors.white70,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          opt.$2,
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.white70,
-                            fontSize: 11.5,
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Panel Bawah Adaptif:
-  /// - Kiri: Tumpukan thumbnail pojok bergaya iOS Screenshot atau tombol Galeri gelap kontras
-  /// - Tengah: Cincin indikator Auto-Scan (saat Auto) ATAU Tombol Shutter Manual (saat Manual)
-  /// - Kanan: Tombol utama "Selesai (N)" untuk langsung membuka panel Simpan/Bagikan PDF
+  /// Panel Bawah Bergaya Xiaomi HyperOS Document Mode:
+  /// - Kiri: Tumpukan thumbnail iOS Screenshot atau tombol Galeri
+  /// - Tengah: Tombol Shutter Cincin Ganda Putih Tactile
+  /// - Kanan: Tombol utama "Selesai (N)"
   Widget _buildBottomAutoScannerBar() {
     final int count = _capturedPages.length;
     final bool hasCaptured = count > 0;
@@ -1635,8 +1811,8 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
             )
           else
             SizedBox(
-              width: 68,
-              height: 68,
+              width: 62,
+              height: 62,
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   backgroundColor: const Color(0xFF232220),
@@ -1644,7 +1820,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                   side: const BorderSide(color: Colors.white24),
                   padding: EdgeInsets.zero,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 onPressed: _pickFallbackFromGallery,
@@ -1652,7 +1828,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.photo_library_outlined, size: 20, color: Colors.white),
-                    SizedBox(height: 4),
+                    SizedBox(height: 3),
                     Text(
                       'Galeri',
                       style: TextStyle(
@@ -1668,11 +1844,9 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
 
           const SizedBox(width: 12),
 
-          // Tengah: Cincin Auto-Capture (ketika Auto aktif) atau Tombol Shutter Manual (ketika Auto nonaktif)
+          // Tengah: Tombol Shutter Bergaya HyperOS
           Expanded(
-            child: _isAutoScanEnabled
-                ? _buildAutoCaptureCenterStatus()
-                : _buildManualShutterButton(),
+            child: _buildHyperOsShutterButton(),
           ),
 
           const SizedBox(width: 12),
@@ -1684,10 +1858,10 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                   ? KertasColors.vermilionStamp
                   : const Color(0xFF2C2A27),
               foregroundColor: Colors.white,
-              minimumSize: const Size(116, 52),
+              minimumSize: const Size(110, 52),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
             onPressed: hasCaptured ? _finishAndReturnPages : null,
@@ -1706,12 +1880,17 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     );
   }
 
-  Widget _buildAutoCaptureCenterStatus() {
+  Widget _buildHyperOsShutterButton() {
+    final bool isLocking = _isAutoScanEnabled &&
+        _scannerState == ScannerState.locking;
+
     return Semantics(
       button: true,
-      label: 'Indikator pemotretan otomatis: $_guidanceText. Ketuk untuk potret langsung.',
+      label: _isAutoScanEnabled
+          ? 'Tombol Shutter Kamera. Auto-scan aktif, ketuk untuk memotret seketika.'
+          : 'Tombol Shutter Kamera. Ketuk untuk memotret.',
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: _triggerManualCapture,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
@@ -1719,52 +1898,66 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                width: 52,
-                height: 52,
+                width: 76,
+                height: 76,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    CircularProgressIndicator(
-                      value: _scannerState == ScannerState.locking
-                          ? _lockProgress.clamp(0.08, 1.0)
-                          : _scannerState == ScannerState.capturing
-                              ? 1.0
-                              : 0.0,
-                      strokeWidth: 4,
-                      backgroundColor: Colors.white24,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _scannerState == ScannerState.cooldown
-                            ? const Color(0xFF4ADE80)
-                            : KertasColors.vermilionStamp,
-                      ),
-                    ),
+                    // Cincin luar putih 76px
                     Container(
-                      width: 36,
-                      height: 36,
+                      width: 76,
+                      height: 76,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _scannerState == ScannerState.cooldown
-                            ? const Color(0xFF15803D).withValues(alpha: 0.35)
-                            : Colors.white.withValues(alpha: 0.10),
+                        border: Border.all(color: Colors.white, width: 3.5),
                       ),
-                      child: Icon(
-                        _scannerState == ScannerState.cooldown
-                            ? Icons.check
-                            : Icons.hdr_auto_outlined,
+                    ),
+                    // Indikator progres kunci Auto-Scan (warna amber #FFD000)
+                    if (isLocking)
+                      SizedBox(
+                        width: 76,
+                        height: 76,
+                        child: CircularProgressIndicator(
+                          value: _lockProgress.clamp(0.08, 1.0),
+                          strokeWidth: 4.5,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFFFFD000),
+                          ),
+                          backgroundColor: Colors.transparent,
+                        ),
+                      ),
+                    // Lingkaran solid putih di dalam (60px)
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
                         color: Colors.white,
-                        size: 20,
+                      ),
+                      child: Center(
+                        child: Icon(
+                          _isAutoScanEnabled
+                              ? (_scannerState == ScannerState.cooldown
+                                  ? Icons.check
+                                  : Icons.hdr_auto_outlined)
+                              : Icons.camera_alt,
+                          color: const Color(0xFF141311),
+                          size: 24,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 5),
               Text(
-                _scannerState == ScannerState.locking
-                    ? 'Mengunci ${(100 * _lockProgress).round()}%'
-                    : _scannerState == ScannerState.cooldown
-                        ? 'Siap Lembar Baru'
-                        : 'Auto-Scan Aktif',
+                !_isAutoScanEnabled
+                    ? 'Potret Manual'
+                    : _scannerState == ScannerState.locking
+                        ? 'Mengunci ${(100 * _lockProgress).round()}%'
+                        : _scannerState == ScannerState.cooldown
+                            ? 'Siap Lembar Baru'
+                            : 'Auto-Scan Aktif',
                 style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 11.5,
@@ -1779,58 +1972,9 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
       ),
     );
   }
-
-  Widget _buildManualShutterButton() {
-    return Semantics(
-      button: true,
-      label: 'Tombol Shutter Potret Manual',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: _triggerManualCapture,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 54,
-                height: 54,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                ),
-                child: Container(
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: KertasColors.vermilionStamp,
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt_outlined,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Potret Manual',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
-/// Pelukis poligon 4 sudut dokumen di atas viewfinder kamera langsung.
+/// Pelukis poligon 4 sudut dokumen di atas viewfinder kamera langsung ala Xiaomi HyperOS.
 class _LiveDocumentPolygonPainter extends CustomPainter {
   final DocumentCorners corners;
   final ScannerState scannerState;
@@ -1863,14 +2007,8 @@ class _LiveDocumentPolygonPainter extends CustomPainter {
       corners.bottomLeft.dy * size.height,
     );
 
-    final bool isGreenState = !isAutoScanEnabled ||
-        scannerState == ScannerState.locking ||
-        scannerState == ScannerState.capturing ||
-        scannerState == ScannerState.cooldown;
-
-    final Color strokeColor = isGreenState
-        ? const Color(0xFF22C55E)
-        : KertasColors.vermilionStamp;
+    // Warna garis golden-amber ala Xiaomi HyperOS Document Mode (#FFD000)
+    const Color strokeColor = Color(0xFFFFD000);
 
     final Path polyPath = Path()
       ..moveTo(tl.dx, tl.dy)
@@ -1881,27 +2019,28 @@ class _LiveDocumentPolygonPainter extends CustomPainter {
 
     final Paint fillPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.16 + 0.10 * lockProgress);
+      ..color = strokeColor.withValues(alpha: 0.10 + 0.08 * lockProgress);
     canvas.drawPath(polyPath, fillPaint);
 
     final Paint borderPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.6
+      ..strokeWidth = 2.0
       ..strokeJoin = StrokeJoin.round
       ..color = strokeColor;
     canvas.drawPath(polyPath, borderPaint);
 
+    // Titik sudut presisi halus (radius 4.0)
     final Paint cornerDotPaint = Paint()
       ..style = PaintingStyle.fill
       ..color = Colors.white;
     final Paint cornerRingPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
+      ..strokeWidth = 2.0
       ..color = strokeColor;
 
     for (final pt in [tl, tr, br, bl]) {
-      canvas.drawCircle(pt, 6.5, cornerDotPaint);
-      canvas.drawCircle(pt, 6.5, cornerRingPaint);
+      canvas.drawCircle(pt, 4.0, cornerDotPaint);
+      canvas.drawCircle(pt, 4.0, cornerRingPaint);
     }
   }
 
@@ -1912,4 +2051,29 @@ class _LiveDocumentPolygonPainter extends CustomPainter {
         oldDelegate.lockProgress != lockProgress ||
         oldDelegate.isAutoScanEnabled != isAutoScanEnabled;
   }
+}
+
+/// Pelukis garis kisi 3x3 (Rule of Thirds) ala kamera Xiaomi HyperOS.
+class _CameraGridPainter extends CustomPainter {
+  const _CameraGridPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.18)
+      ..strokeWidth = 1.0;
+
+    final double x1 = size.width / 3.0;
+    final double x2 = size.width * 2.0 / 3.0;
+    final double y1 = size.height / 3.0;
+    final double y2 = size.height * 2.0 / 3.0;
+
+    canvas.drawLine(Offset(x1, 0), Offset(x1, size.height), paint);
+    canvas.drawLine(Offset(x2, 0), Offset(x2, size.height), paint);
+    canvas.drawLine(Offset(0, y1), Offset(size.width, y1), paint);
+    canvas.drawLine(Offset(0, y2), Offset(size.width, y2), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CameraGridPainter oldDelegate) => false;
 }

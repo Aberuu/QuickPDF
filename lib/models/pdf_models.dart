@@ -87,12 +87,12 @@ enum QualityPreset {
   }
 }
 
-/// Filter pemindaian cerdas dokumen ala HyperOS (Fase 4)
+/// Filter pemindaian cerdas dokumen autentik ala Xiaomi HyperOS (Fase 4)
 enum DocumentFilterType {
-  original('original', 'Foto Asli', 'Warna asli tanpa perubahan'),
-  magicColor('magic', 'Enhanced', 'Putihkan latar kertas, hilangkan bayangan & pertahankan warna tinta'),
-  blackAndWhite('bw', 'Hitam Putih', 'Tinta hitam pekat kontras tinggi & kertas putih bersih'),
-  grayscaleSharpen('gray', 'Abu-abu Tajam', 'Skala abu-abu dengan penajaman tepi huruf');
+  original('original', 'Original', 'Warna foto asli tanpa filter'),
+  blackAndWhite('bw', 'B&W', 'Sauvola adaptive binarization, teks hitam pekat fotokopi'),
+  magicColor('enhanced', 'Enhanced', 'Pembersihan bayangan adaptif & latar kertas putih bersih'),
+  grayscaleSharpen('gray', 'Grayscale', 'Skala abu-abu tajam');
 
   final String code;
   final String label;
