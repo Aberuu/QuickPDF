@@ -1,3 +1,4 @@
+import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'screens/home_and_workspace_screen.dart';
 import 'services/local_history_store.dart';
@@ -45,6 +46,14 @@ class _QuickPdfAppState extends State<QuickPdfApp> {
       theme: KertasTheme.light(),
       darkTheme: KertasTheme.dark(),
       themeMode: _themeMode,
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        dragDevices: {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.trackpad,
+          PointerDeviceKind.stylus,
+        },
+      ),
       home: HomeAndWorkspaceScreen(
         currentThemeMode: _themeMode,
         onThemeModeChanged: _updateThemeMode,

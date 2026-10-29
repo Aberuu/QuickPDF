@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:image/image.dart' as img;
 import '../models/pdf_models.dart';
 import 'document_detector.dart';
+import 'pdf_generator_service.dart';
 
 /// Layanan pemrosesan citra dokumen 100% On-Device (Fase 4: Smart Scanner)
 /// Meliputi:
@@ -85,11 +86,24 @@ class SmartScannerService {
   }
 
   /// Mengompresi citra halaman sesuai QualityPreset sebelum dimasukkan ke dokumen PDF
-  static Uint8List compressForPdf(Uint8List sourceBytes, QualityPreset preset) {
+  static Uint8List compressForPdf(
+    Uint8List sourceBytes,
+    QualityPreset preset, {
+    int rotationQuarterTurns = 0,
+  }) {
     final decoded = img.decodeImage(sourceBytes);
     if (decoded == null) return sourceBytes;
 
     img.Image working = img.bakeOrientation(decoded);
+    final turns = rotationQuarterTurns % 4;
+    if (turns == 1) {
+      working = img.copyRotate(working, angle: 90);
+    } else if (turns == 2) {
+      working = img.copyRotate(working, angle: 180);
+    } else if (turns == 3) {
+      working = img.copyRotate(working, angle: 270);
+    }
+
     final maxDim = math.max(working.width, working.height);
     if (maxDim > preset.maxDimensionPx) {
       if (working.width >= working.height) {
@@ -111,12 +125,43 @@ class SmartScannerService {
   }
 
   /// Membuat thumbnail halaman pertama yang ringan untuk daftar Riwayat PDF (< 25 KB)
-  static Uint8List createHistoryThumbnail(Uint8List sourceBytes) {
+  static Uint8List createHistoryThumbnail(
+    Uint8List sourceBytes, {
+    int rotationQuarterTurns = 0,
+  }) {
     final decoded = img.decodeImage(sourceBytes);
     if (decoded == null) return sourceBytes;
-    final working = img.bakeOrientation(decoded);
+    img.Image working = img.bakeOrientation(decoded);
+    final turns = rotationQuarterTurns % 4;
+    if (turns == 1) {
+      working = img.copyRotate(working, angle: 90);
+    } else if (turns == 2) {
+      working = img.copyRotate(working, angle: 180);
+    } else if (turns == 3) {
+      working = img.copyRotate(working, angle: 270);
+    }
     final thumb = img.copyResize(working, width: 260, interpolation: img.Interpolation.average);
     return Uint8List.fromList(img.encodeJpg(thumb, quality: 72));
+  }
+
+  /// Menghasilkan berkas dokumen PDF dari daftar halaman dalam waktu cepat.
+  /// Meneruskan proses ke [PdfGeneratorService.buildPdfDocument] dengan rotasi dan kompresi yang sesuai.
+  static Future<PdfGenerationResult> generatePdf({
+    required List<ScannedPageItem> pages,
+    required String rawFileName,
+    required PaperSizeOption paperSize,
+    required PageMarginOption marginOption,
+    required QualityPreset qualityPreset,
+    bool saveToDevice = false,
+  }) {
+    return PdfGeneratorService.buildPdfDocument(
+      pages: pages,
+      rawFileName: rawFileName,
+      paperSize: paperSize,
+      marginOption: marginOption,
+      qualityPreset: qualityPreset,
+      saveToDevice: saveToDevice,
+    );
   }
 
   /// Menghasilkan lembaran dokumen contoh realistis (dengan kemiringan perspektif di atas meja)
@@ -491,15 +536,8 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
     working = warped;
   }
 
-  // 2. Rotasi 90 derajat per klik
-  final turns = payload.rotationQuarterTurns % 4;
-  if (turns == 1) {
-    working = img.copyRotate(working, angle: 90);
-  } else if (turns == 2) {
-    working = img.copyRotate(working, angle: 180);
-  } else if (turns == 3) {
-    working = img.copyRotate(working, angle: 270);
-  }
+  // Rotasi 90 derajat ditangani secara instan via AnimatedRotation di UI
+  // dan diproses saat pembuatan file PDF di compressForPdf.
 
   // 3. Terapkan Filter Dokumen Instan Ala HyperOS (Enhanced, Hitam Putih Sauvola, Foto Asli) & Kontras Manual
   final filter = payload.filterCode;

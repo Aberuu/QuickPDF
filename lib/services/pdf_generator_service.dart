@@ -55,13 +55,22 @@ class PdfGeneratorService {
       final compressedBytes = SmartScannerService.compressForPdf(
         pageItem.displayBytes,
         qualityPreset,
+        rotationQuarterTurns: pageItem.rotationQuarterTurns,
       );
       final pdfImage = pw.MemoryImage(compressedBytes);
 
+      final isQuarterTurn = pageItem.rotationQuarterTurns % 2 != 0;
+      final effectiveWidth = isQuarterTurn
+          ? pageItem.height.toDouble()
+          : pageItem.width.toDouble();
+      final effectiveHeight = isQuarterTurn
+          ? pageItem.width.toDouble()
+          : pageItem.height.toDouble();
+
       final PdfPageFormat pageFormat = _resolvePageFormat(
         paperSize: paperSize,
-        imgWidth: pageItem.width.toDouble(),
-        imgHeight: pageItem.height.toDouble(),
+        imgWidth: effectiveWidth,
+        imgHeight: effectiveHeight,
       );
 
       doc.addPage(
@@ -89,7 +98,10 @@ class PdfGeneratorService {
     stopwatch.stop();
 
     final firstThumb = pages.isNotEmpty
-        ? SmartScannerService.createHistoryThumbnail(pages.first.displayBytes)
+        ? SmartScannerService.createHistoryThumbnail(
+            pages.first.displayBytes,
+            rotationQuarterTurns: pages.first.rotationQuarterTurns,
+          )
         : Uint8List(0);
 
     final entry = PdfHistoryEntry(

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image/image.dart' as img;
 import 'package:kertas_pdf/main.dart';
 import 'package:kertas_pdf/models/pdf_models.dart';
+import 'package:kertas_pdf/screens/full_screen_preview_dialog.dart';
 import 'package:kertas_pdf/services/pdf_generator_service.dart';
 import 'package:kertas_pdf/services/smart_scanner_service.dart';
 import 'package:kertas_pdf/widgets/screenshot_capture_animation.dart';
@@ -157,21 +159,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('QuickPDF Live Scanner'), findsOneWidget);
-    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Manual'), findsOneWidget);
     expect(find.text('Original'), findsOneWidget);
     expect(find.text('B&W'), findsOneWidget);
     expect(find.text('Enhanced'), findsOneWidget);
     // Pastikan tombol Galeri terlihat sebelum ada foto yang dipotret
     expect(find.text('Galeri'), findsOneWidget);
+    expect(find.text('Potret Manual'), findsOneWidget);
 
     // Ganti filter kamera ke B&W ala HyperOS
     await tester.tap(find.text('B&W'));
     await tester.pumpAndSettle();
 
-    // Majukan waktu selama ~1,1 detik agar detektor mengunci stabil 0,8 detik dan memotret otomatis
-    for (int i = 0; i < 10; i++) {
-      await tester.pump(const Duration(milliseconds: 120));
-    }
+    // Dalam Mode Manual default, ketuk tombol shutter 'Potret Manual' untuk lembar ke-1
+    await tester.tap(find.text('Potret Manual'));
     await tester.pumpAndSettle();
 
     expect(find.text('Selesai (1)'), findsOneWidget);
@@ -188,14 +189,15 @@ void main() {
     await tester.tapAt(const Offset(20, 20));
     await tester.pumpAndSettle();
 
-    // 3. Nonaktifkan Auto-Scan secara manual -> beralih ke Mode Manual (Tombol Shutter)
-    await tester.tap(find.text('Auto'));
+    // 3. Aktifkan Auto-Scan secara manual -> beralih ke Mode Auto
+    await tester.tap(find.text('Manual'));
     await tester.pumpAndSettle();
-    expect(find.text('Manual'), findsOneWidget);
-    expect(find.text('Potret Manual'), findsOneWidget);
+    expect(find.text('Auto'), findsOneWidget);
 
-    // Ketuk tombol shutter 'Potret Manual' untuk memotret lembar ke-2 secara manual
-    await tester.tap(find.text('Potret Manual'));
+    // Majukan waktu selama ~1,1 detik agar detektor mengunci stabil 0,8 detik dan memotret otomatis lembar ke-2
+    for (int i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 120));
+    }
     await tester.pumpAndSettle();
     expect(find.text('Selesai (2)'), findsOneWidget);
 
@@ -227,5 +229,129 @@ void main() {
     await tester.tap(find.text('Simpan Perubahan Halaman'));
     await tester.pumpAndSettle();
     expect(find.text('Meja Kerja (2)'), findsOneWidget);
+  });
+
+  testWidgets('Verifikasi Modern UX: Pembersihan Riwayat, Swipe PageView, & Rotasi Instan 0ms',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const QuickPdfApp());
+    await tester.pumpAndSettle();
+
+    // 1. Verifikasi tab Riwayat PDF bersih tanpa banner "Konversi Foto ke PDF Siap Kirim"
+    expect(find.text('Riwayat PDF Terbaru'), findsOneWidget);
+    expect(find.text('Belum Ada Riwayat Dokumen PDF'), findsOneWidget);
+    expect(find.text('Konversi Foto ke PDF Siap Kirim'), findsNothing);
+    expect(find.text('Coba 3 Lembar Contoh Ujian'), findsNothing);
+
+    // 2. Verifikasi Navigasi Swipe Horizontal PageView
+    expect(find.byType(PageView), findsOneWidget);
+    // Geser/drag dari kanan ke kiri untuk beralih ke Meja Kerja
+    await tester.drag(find.byType(PageView), const Offset(300, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Meja Kerja Masih Kosong'), findsOneWidget);
+
+    // Geser kembali dari kiri ke kanan untuk beralih ke Riwayat PDF
+    await tester.drag(find.byType(PageView), const Offset(-300, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Riwayat PDF Terbaru'), findsOneWidget);
+
+    // Ketuk tombol tab Meja Kerja di bilah atas
+    await tester.tap(find.text('Meja Kerja (0)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Meja Kerja Masih Kosong'), findsOneWidget);
+
+    // Muat 3 lembar contoh untuk menguji rotasi
+    await tester.tap(find.text('Muat 3 Lembar Contoh Ujian'));
+    await tester.pumpAndSettle();
+    expect(find.text('Meja Kerja (3)'), findsOneWidget);
+
+    // 3. Verifikasi Rotasi Instan (0ms Loading) & AnimatedRotation
+    expect(find.byType(AnimatedRotation), findsWidgets);
+    final rotateButtons = find.byTooltip('Putar Halaman 90°');
+    expect(rotateButtons, findsWidgets);
+
+    // Ketuk putar 90 derajat; pastikan TIDAK ADA overlay loading "Memutar halaman..."
+    await tester.tap(rotateButtons.first);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.textContaining('Memutar halaman'), findsNothing);
+    await tester.pumpAndSettle();
+
+    // Verifikasi AnimatedRotation pada thumbnail pertama bernilai 0.25 (90 derajat)
+    final animatedRotations = tester.widgetList<AnimatedRotation>(find.byType(AnimatedRotation));
+    expect(animatedRotations.any((w) => w.turns == 0.25), isTrue);
+
+    // Putar lagi ke 180 derajat (0.5 turns)
+    await tester.tap(rotateButtons.first);
+    await tester.pumpAndSettle();
+    final updatedRotations = tester.widgetList<AnimatedRotation>(find.byType(AnimatedRotation));
+    expect(updatedRotations.any((w) => w.turns == 0.5), isTrue);
+
+    // 4. Verifikasi rotasi in-place di FullScreenPreviewDialog tanpa dialog tertutup
+    await tester.tap(find.byIcon(Icons.zoom_in).first);
+    await tester.pumpAndSettle();
+    expect(find.byType(FullScreenPreviewDialog), findsOneWidget);
+    final dialogRotations = tester.widgetList<AnimatedRotation>(find.byType(AnimatedRotation));
+    expect(dialogRotations.any((w) => w.turns == 0.5), isTrue);
+
+    // Ketuk 'Putar 90°' di dalam dialog pratinjau; pastikan dialog TETAP TERBUKA dan rotasi bertambah
+    await tester.tap(find.text('Putar 90°'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FullScreenPreviewDialog), findsOneWidget);
+    final dialogRotationsUpdated = tester.widgetList<AnimatedRotation>(find.byType(AnimatedRotation));
+    expect(dialogRotationsUpdated.any((w) => w.turns == 0.75), isTrue);
+
+    // Tutup dialog pratinjau
+    await tester.tap(find.byTooltip('Tutup Pratinjau'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FullScreenPreviewDialog), findsNothing);
+  });
+
+  test('SmartScannerService.generatePdf mematuhi rotationQuarterTurns fisik (0, 90, 180, 270 derajat)', () async {
+    final sampleBytes = SmartScannerService.generateSampleSheetBytes(templateIndex: 0);
+
+    // Verifikasi compressForPdf memutar buffer piksel sesuai kuadran
+    final c0 = SmartScannerService.compressForPdf(sampleBytes, QualityPreset.medium, rotationQuarterTurns: 0);
+    final img0 = img.decodeImage(c0)!;
+    expect(img0.width < img0.height, isTrue, reason: '0 derajat harus tetap portrait');
+
+    final c90 = SmartScannerService.compressForPdf(sampleBytes, QualityPreset.medium, rotationQuarterTurns: 1);
+    final img90 = img.decodeImage(c90)!;
+    expect(img90.width > img90.height, isTrue, reason: '90 derajat harus menjadi landscape');
+
+    final c180 = SmartScannerService.compressForPdf(sampleBytes, QualityPreset.medium, rotationQuarterTurns: 2);
+    final img180 = img.decodeImage(c180)!;
+    expect(img180.width < img180.height, isTrue, reason: '180 derajat harus tetap portrait');
+
+    final c270 = SmartScannerService.compressForPdf(sampleBytes, QualityPreset.medium, rotationQuarterTurns: 3);
+    final img270 = img.decodeImage(c270)!;
+    expect(img270.width > img270.height, isTrue, reason: '270 derajat harus menjadi landscape');
+
+    // Verifikasi SmartScannerService.generatePdf menghasilkan PDF valid
+    final page = ScannedPageItem(
+      id: 'rot_p1',
+      sourceLabel: 'Rotasi 90 Deg',
+      originalBytes: sampleBytes,
+      displayBytes: sampleBytes,
+      rotationQuarterTurns: 1,
+      width: 900,
+      height: 1200,
+    );
+
+    final result = await SmartScannerService.generatePdf(
+      pages: [page],
+      rawFileName: 'Hasil_Rotasi_Test',
+      paperSize: PaperSizeOption.a4,
+      marginOption: PageMarginOption.small,
+      qualityPreset: QualityPreset.medium,
+      saveToDevice: false,
+    );
+
+    expect(result.fileName, equals('Hasil_Rotasi_Test.pdf'));
+    expect(result.pdfBytes.isNotEmpty, isTrue);
+    expect(result.historyEntry.thumbnailBytes.isNotEmpty, isTrue);
   });
 }

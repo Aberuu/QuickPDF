@@ -43,7 +43,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
   Timer? _frameLoopTimer;
   Timer? _sheetSwapTimer;
 
-  bool _isAutoScanEnabled = true;
+  bool _isAutoScanEnabled = false;
   bool _isInitializingCamera = true;
   bool _isPermissionDenied = false;
   bool _isUsingSimulationFallback = false;
@@ -61,7 +61,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
   DocumentCorners? _smoothedCorners;
   double _lockProgress = 0.0;
   bool _showLowContrastHint = false;
-  String _guidanceText = 'Arahkan kamera ke dokumen';
+  String _guidanceText = 'Mode Manual: ketuk tombol shutter untuk memotret';
 
   // Daftar halaman yang berhasil dipotret dalam sesi ini
   final List<ScannedPageItem> _capturedPages = [];
@@ -854,6 +854,12 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
             );
       }
 
+      // Picu animasi shutter seketika tanpa jeda freeze processing di awal
+      setState(() {
+        _animatingCaptureBytes = rawBytes;
+        _captureSequenceId++;
+      });
+
       final int pageNumber =
           widget.existingPageCount + _capturedPages.length + 1;
       final ScannedPageItem rawItem = ScannedPageItem(
@@ -885,8 +891,6 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
 
       setState(() {
         _capturedPages.add(processedItem);
-        _animatingCaptureBytes = processedItem.displayBytes;
-        _captureSequenceId++;
         _scannerState =
             _isAutoScanEnabled ? ScannerState.cooldown : ScannerState.searching;
         _lockProgress = 0.0;

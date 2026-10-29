@@ -146,8 +146,12 @@ class _SmartScannerSheetState extends State<SmartScannerSheet> {
                     onPressed: _isProcessing
                         ? null
                         : () {
-                            setState(() => _rotationTurns = (_rotationTurns + 1) % 4);
-                            _rebuildPreview();
+                            setState(() {
+                              _rotationTurns = (_rotationTurns + 1) % 4;
+                              _workingPage = _workingPage.copyWith(
+                                rotationQuarterTurns: _rotationTurns,
+                              );
+                            });
                           },
                     icon: const Icon(Icons.rotate_90_degrees_cw_outlined, size: 18),
                     label: const Text('Putar 90°'),
@@ -182,10 +186,15 @@ class _SmartScannerSheetState extends State<SmartScannerSheet> {
                     else
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.memory(
-                          _workingPage.displayBytes,
-                          fit: BoxFit.contain,
-                          gaplessPlayback: true,
+                        child: AnimatedRotation(
+                          turns: _rotationTurns / 4.0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOutCubic,
+                          child: Image.memory(
+                            _workingPage.displayBytes,
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                          ),
                         ),
                       ),
                     if (_isProcessing)

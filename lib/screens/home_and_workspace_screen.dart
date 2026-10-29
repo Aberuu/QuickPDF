@@ -31,6 +31,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
   final ImagePicker _picker = ImagePicker();
   final List<ScannedPageItem> _workspacePages = [];
   List<PdfHistoryEntry> _historyEntries = [];
+  late final PageController _pageController;
 
   ActiveTab _activeTab = ActiveTab.history;
   bool _isLoadingHistory = true;
@@ -46,7 +47,37 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(
+      initialPage: _activeTab == ActiveTab.workspace ? 0 : 1,
+    );
     _initializeData();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _setActiveTab(ActiveTab tab, {bool animate = true}) {
+    if (_activeTab == tab &&
+        _pageController.hasClients &&
+        _pageController.page?.round() == (tab == ActiveTab.workspace ? 0 : 1)) {
+      return;
+    }
+    setState(() => _activeTab = tab);
+    final targetPage = tab == ActiveTab.workspace ? 0 : 1;
+    if (_pageController.hasClients) {
+      if (animate) {
+        _pageController.animateToPage(
+          targetPage,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+        );
+      } else {
+        _pageController.jumpToPage(targetPage);
+      }
+    }
   }
 
   Future<void> _initializeData() async {
@@ -115,9 +146,9 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
       if (!mounted) return;
       setState(() {
         _workspacePages.addAll(added);
-        _activeTab = ActiveTab.workspace;
         _isBusyProcessing = false;
       });
+      _setActiveTab(ActiveTab.workspace);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -143,8 +174,8 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     if (captured != null && captured.isNotEmpty && mounted) {
       setState(() {
         _workspacePages.addAll(captured);
-        _activeTab = ActiveTab.workspace;
       });
+      _setActiveTab(ActiveTab.workspace);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _workspacePages.isNotEmpty) {
           _openExportPdfSheet();
@@ -183,9 +214,9 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
       if (!mounted) return;
       setState(() {
         _workspacePages.addAll(samples);
-        _activeTab = ActiveTab.workspace;
         _isBusyProcessing = false;
       });
+      _setActiveTab(ActiveTab.workspace);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -210,24 +241,14 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     });
   }
 
-  /// Fase 2: Putar orientasi halaman 90 derajat per klik
-  Future<void> _rotatePage90(int index) async {
+  /// Fase 2: Putar orientasi halaman 90 derajat per klik (rotasi instan 0ms)
+  void _rotatePage90(int index) {
     if (index < 0 || index >= _workspacePages.length) return;
     final current = _workspacePages[index];
     setState(() {
-      _isBusyProcessing = true;
-      _busyMessage = 'Memutar halaman ${(index + 1).toString().padLeft(2, '0')}...';
-    });
-
-    final updated = await SmartScannerService.processPage(
-      current,
-      rotationQuarterTurns: (current.rotationQuarterTurns + 1) % 4,
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _workspacePages[index] = updated;
-      _isBusyProcessing = false;
+      _workspacePages[index] = current.copyWith(
+        rotationQuarterTurns: (current.rotationQuarterTurns + 1) % 4,
+      );
     });
   }
 
@@ -237,10 +258,10 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     final removed = _workspacePages[index];
     setState(() {
       _workspacePages.removeAt(index);
-      if (_workspacePages.isEmpty) {
-        _activeTab = ActiveTab.history;
-      }
     });
+    if (_workspacePages.isEmpty) {
+      _setActiveTab(ActiveTab.history);
+    }
 
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -253,8 +274,8 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
             setState(() {
               final insertIdx = index.clamp(0, _workspacePages.length);
               _workspacePages.insert(insertIdx, removed);
-              _activeTab = ActiveTab.workspace;
             });
+            _setActiveTab(ActiveTab.workspace);
           },
         ),
       ),
@@ -404,7 +425,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
         quality: request.quality,
       );
 
-      final genResult = await PdfGeneratorService.buildPdfDocument(
+      final genResult = await SmartScannerService.generatePdf(
         pages: _workspacePages,
         rawFileName: request.fileName,
         paperSize: request.paperSize,
@@ -787,7 +808,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                           label: 'Meja Kerja (${_workspacePages.length})',
                           icon: Icons.grid_view_rounded,
                           isSelected: _activeTab == ActiveTab.workspace,
-                          onTap: () => setState(() => _activeTab = ActiveTab.workspace),
+                          onTap: () => _setActiveTab(ActiveTab.workspace),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -796,7 +817,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                           label: 'Riwayat PDF (${_historyEntries.length})',
                           icon: Icons.history_edu_outlined,
                           isSelected: _activeTab == ActiveTab.history,
-                          onTap: () => setState(() => _activeTab = ActiveTab.history),
+                          onTap: () => _setActiveTab(ActiveTab.history),
                         ),
                       ),
                     ],
@@ -841,11 +862,21 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                     ),
                   ),
 
-                // Isi Utama: Workspace Editor atau Daftar Riwayat PDF
+                // Isi Utama: Workspace Editor atau Daftar Riwayat PDF dengan Horizontal Swipe (PageView)
                 Expanded(
-                  child: _activeTab == ActiveTab.workspace
-                      ? _buildWorkspaceEditorView(theme)
-                      : _buildHistoryHomeView(theme),
+                  child: PageView(
+                    controller: _pageController,
+                    onPageChanged: (index) {
+                      final newTab = index == 0 ? ActiveTab.workspace : ActiveTab.history;
+                      if (_activeTab != newTab) {
+                        setState(() => _activeTab = newTab);
+                      }
+                    },
+                    children: [
+                      _buildWorkspaceEditorView(theme),
+                      _buildHistoryHomeView(theme),
+                    ],
+                  ),
                 ),
 
                 // Panel Aksi Bawah Ramah Satu Tangan (Thumb-Friendly Bottom Bar)
@@ -1033,72 +1064,8 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     }).toList();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       children: [
-        // Kartu Ringkas Mulai Cepat
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Konversi Foto ke PDF Siap Kirim',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Potret lembar jawaban kuliah, KTP, atau kuitansi secara beruntun. Ukuran default: ${_defaultPaper.label} • ${_defaultQuality.label}.',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: theme.textTheme.bodySmall?.color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 42),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      onPressed: _loadSampleExamPages,
-                      icon: const Icon(Icons.science_outlined, size: 18),
-                      label: const Text('Coba 3 Lembar Contoh Ujian'),
-                    ),
-                    if (_workspacePages.isNotEmpty)
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(0, 42),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        ),
-                        onPressed: () => setState(() => _activeTab = ActiveTab.workspace),
-                        icon: const Icon(Icons.edit_document, size: 18),
-                        label: Text(
-                          'Lanjutkan ${_workspacePages.length} Halaman di Meja Kerja',
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
         // Header Riwayat PDF + Pencarian
         Row(
           children: [
@@ -1404,9 +1371,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
                     onPressed: () {
-                      setState(() {
-                        _activeTab = ActiveTab.workspace;
-                      });
+                      _setActiveTab(ActiveTab.workspace);
                     },
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1679,10 +1644,15 @@ class _DraggablePageCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.memory(
-                      page.displayBytes,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
+                    AnimatedRotation(
+                      turns: page.rotationQuarterTurns / 4.0,
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      child: Image.memory(
+                        page.displayBytes,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      ),
                     ),
                     if (page.isEnhanced || page.rotationQuarterTurns > 0)
                       Positioned(

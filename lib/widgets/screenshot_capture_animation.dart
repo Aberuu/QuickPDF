@@ -35,7 +35,7 @@ class _ScreenshotCaptureAnimationOverlayState
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 430),
+      duration: const Duration(milliseconds: 650),
     )..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
           if (mounted) {
@@ -120,15 +120,15 @@ class _ScreenshotCaptureAnimationOverlayState
             builder: (context, _) {
               final double t = _controller.value;
 
-              // Fase 1 (0.00 - 0.19 ~ 80ms): kilatan layar putih
-              final double flashOpacity = t < 0.19
-                  ? (1.0 - (t / 0.19)).clamp(0.0, 0.85)
+              // Fase 1 (0.00 - 0.11 ~ 70ms): kedipan shutter putih lembut seketika
+              final double flashOpacity = t < 0.11
+                  ? (1.0 - (t / 0.11)).clamp(0.0, 0.45)
                   : 0.0;
 
-              // Fase 2 (0.19 - 1.00 ~ 350ms): kurva easeOutCubic menuju pojok kiri bawah
-              final double flyProgress = t <= 0.19
+              // Fase 2 (0.11 - 1.00 ~ 580ms): kurva easeOutCubic melambat anggun ke pojok kiri bawah
+              final double flyProgress = t <= 0.11
                   ? 0.0
-                  : Curves.easeOutCubic.transform(((t - 0.19) / 0.81).clamp(0.0, 1.0));
+                  : Curves.easeOutCubic.transform(((t - 0.11) / 0.89).clamp(0.0, 1.0));
 
               final Rect currentRect = Rect.lerp(startRect, endRect, flyProgress)!;
               final double cardOpacity = t > 0.92

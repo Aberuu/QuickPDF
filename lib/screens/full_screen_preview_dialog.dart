@@ -103,10 +103,15 @@ class _FullScreenPreviewDialogState extends State<FullScreenPreviewDialog> {
                 child: Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Image.memory(
-                      page.displayBytes,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
+                    child: AnimatedRotation(
+                      turns: page.rotationQuarterTurns / 4.0,
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      child: Image.memory(
+                        page.displayBytes,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                      ),
                     ),
                   ),
                 ),
@@ -136,8 +141,8 @@ class _FullScreenPreviewDialogState extends State<FullScreenPreviewDialog> {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                       ),
                       onPressed: () {
-                        Navigator.of(context).pop();
                         widget.onRotatePage(_currentIndex);
+                        setState(() {});
                       },
                       icon: const Icon(Icons.rotate_90_degrees_cw_outlined, size: 17),
                       label: const Text('Putar 90°', overflow: TextOverflow.ellipsis),

@@ -5,9 +5,9 @@ import 'dart:ui';
 /// Opsi ukuran halaman PDF (Fase 3)
 enum PaperSizeOption {
   fit('fit', 'Sesuai Foto (Fit)', 'Ukuran halaman mengikuti dimensi asli foto'),
-  a4('a4', 'A4 (210 × 297 mm)', 'Standar tugas kuliah & administrasi di Indonesia'),
-  letter('letter', 'Letter (216 × 279 mm)', 'Standar dokumen internasional'),
-  legal('legal', 'Legal / F4 (216 × 356 mm)', 'Berkas kontrak & dokumen panjang');
+  a4('a4', 'A4 (210 x 297 mm)', 'Standar tugas kuliah & administrasi di Indonesia'),
+  letter('letter', 'Letter (216 x 279 mm)', 'Standar dokumen internasional'),
+  legal('legal', 'Legal / F4 (216 x 356 mm)', 'Berkas kontrak & dokumen panjang');
 
   final String code;
   final String label;
