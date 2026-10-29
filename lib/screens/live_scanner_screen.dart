@@ -61,7 +61,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
   DocumentCorners? _smoothedCorners;
   double _lockProgress = 0.0;
   bool _showLowContrastHint = false;
-  String _guidanceText = 'Mode Manual: ketuk tombol shutter untuk memotret';
+  String _guidanceText = 'Mode Manual: ketuk shutter untuk memotret layar/dokumen';
 
   // Daftar halaman yang berhasil dipotret dalam sesi ini
   final List<ScannedPageItem> _capturedPages = [];
@@ -290,8 +290,8 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
       _lockProgress = 0.0;
       _scannerState = ScannerState.searching;
       _guidanceText = nextAuto
-          ? 'Auto-Scan aktif: arahkan kamera ke dokumen'
-          : 'Mode Manual: ketuk tombol shutter untuk memotret';
+          ? 'Auto-Scan aktif: arahkan kamera ke layar, papan, atau dokumen'
+          : 'Mode Manual: ketuk shutter untuk memotret layar/dokumen';
     });
 
     if (_isUsingSimulationFallback && nextAuto) {
@@ -777,8 +777,8 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
         _scannerState = ScannerState.searching;
         _showLowContrastHint = false;
         _guidanceText = detection != null
-            ? 'Dokumen terdeteksi • Ketuk tombol shutter untuk memotret'
-            : 'Mode Manual • Ketuk tombol shutter untuk memotret';
+            ? 'Objek terdeteksi • Ketuk shutter untuk memotret'
+            : 'Mode Manual: ketuk shutter untuk memotret layar/dokumen';
       });
       return;
     }

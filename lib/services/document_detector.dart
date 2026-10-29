@@ -138,11 +138,14 @@ class DocumentDetector {
       return primary;
     }
 
-    // Jika objek di tengah memiliki bingkai warna (misal ID Card berbingkai plastik biru)
-    // sehingga area putih di dalamnya terlalu kecil pada ambang utama, coba ambang pemisah latar meja.
-    if (stats.paperIsBrighter && stats.contrast >= 45.0) {
-      final int secondaryThreshold =
-          (stats.bgEstimate + math.max(26.0, stats.contrast * 0.22))
+    // Jika objek di tengah memiliki bingkai warna / bezel kontras
+    // sehingga area di dalamnya berbeda pada ambang utama, coba ambang pemisah sekunder.
+    if (stats.contrast >= 45.0) {
+      final int secondaryThreshold = stats.paperIsBrighter
+          ? (stats.bgEstimate + math.max(26.0, stats.contrast * 0.22))
+              .round()
+              .clamp(15, 240)
+          : (stats.bgEstimate - math.max(26.0, stats.contrast * 0.22))
               .round()
               .clamp(15, 240);
       if ((secondaryThreshold - stats.threshold).abs() >= 12) {
@@ -152,7 +155,7 @@ class DocumentDetector {
           uSmall: uSmall,
           vSmall: vSmall,
           threshold: secondaryThreshold,
-          paperIsBrighter: true,
+          paperIsBrighter: stats.paperIsBrighter,
           contrast: stats.contrast,
           bgEstimate: stats.bgEstimate,
           uBgEstimate: stats.uBgEstimate,
@@ -516,33 +519,77 @@ class DocumentDetector {
     Uint8List? uSmall,
     Uint8List? vSmall,
   }) {
-    // Hitung rata-rata luminansi & krominansi cincin perimeter luar (margin 8%)
-    // (mengabaikan tepi bawah agar tidak terbias oleh lantai keramik terang).
-    double borderSumY = 0;
-    double borderSumU = 0;
-    double borderSumV = 0;
-    int borderCount = 0;
+    // 1. Sampling Latar Belakang 4 Sisi Simetris Adaptif (Median 4 Sisi untuk Eliminasi Nilai Ekstrem)
+    final int ringDepth = math.max(2, (math.min(w, h) * 0.05).round());
 
-    for (int x = 0; x < w; x++) {
-      borderSumY += blurred[x];
-      if (uSmall != null) borderSumU += uSmall[x];
-      if (vSmall != null) borderSumV += vSmall[x];
-      borderCount++;
-    }
-    final int maxSideY = (h * 0.75).round().clamp(1, h - 1);
-    for (int y = 1; y < maxSideY; y++) {
-      final int leftIdx = y * w;
-      final int rightIdx = leftIdx + (w - 1);
-      borderSumY += blurred[leftIdx] + blurred[rightIdx];
-      if (uSmall != null) borderSumU += uSmall[leftIdx] + uSmall[rightIdx];
-      if (vSmall != null) borderSumV += vSmall[leftIdx] + vSmall[rightIdx];
-      borderCount += 2;
-    }
-    final double upperSideBorderMean = borderSumY / math.max(1, borderCount);
-    final double uBgEstimate = uSmall != null ? borderSumU / math.max(1, borderCount) : 128.0;
-    final double vBgEstimate = vSmall != null ? borderSumV / math.max(1, borderCount) : 128.0;
+    double topSumY = 0, bottomSumY = 0, leftSumY = 0, rightSumY = 0;
+    double topSumU = 0, bottomSumU = 0, leftSumU = 0, rightSumU = 0;
+    double topSumV = 0, bottomSumV = 0, leftSumV = 0, rightSumV = 0;
+    int topCount = 0, bottomCount = 0, leftCount = 0, rightCount = 0;
 
-    // Distribusi wilayah tengah (ROI utama dokumen) dan pusat bidikan (ROI ID Card)
+    // Sisi atas dan bawah
+    for (int y = 0; y < ringDepth; y++) {
+      final int rowTop = y * w;
+      final int rowBottom = (h - 1 - y) * w;
+      for (int x = 0; x < w; x++) {
+        topSumY += blurred[rowTop + x];
+        if (uSmall != null) topSumU += uSmall[rowTop + x];
+        if (vSmall != null) topSumV += vSmall[rowTop + x];
+        topCount++;
+
+        bottomSumY += blurred[rowBottom + x];
+        if (uSmall != null) bottomSumU += uSmall[rowBottom + x];
+        if (vSmall != null) bottomSumV += vSmall[rowBottom + x];
+        bottomCount++;
+      }
+    }
+
+    // Sisi kiri dan kanan (di antara ringDepth atas dan bawah)
+    for (int y = ringDepth; y < h - ringDepth; y++) {
+      final int row = y * w;
+      for (int x = 0; x < ringDepth; x++) {
+        final int leftIdx = row + x;
+        final int rightIdx = row + (w - 1 - x);
+
+        leftSumY += blurred[leftIdx];
+        if (uSmall != null) leftSumU += uSmall[leftIdx];
+        if (vSmall != null) leftSumV += vSmall[leftIdx];
+        leftCount++;
+
+        rightSumY += blurred[rightIdx];
+        if (uSmall != null) rightSumU += uSmall[rightIdx];
+        if (vSmall != null) rightSumV += vSmall[rightIdx];
+        rightCount++;
+      }
+    }
+
+    final double topMeanY = topSumY / math.max(1, topCount);
+    final double bottomMeanY = bottomSumY / math.max(1, bottomCount);
+    final double leftMeanY = leftSumY / math.max(1, leftCount);
+    final double rightMeanY = rightSumY / math.max(1, rightCount);
+
+    final List<double> sortedSidesY = [topMeanY, bottomMeanY, leftMeanY, rightMeanY]..sort();
+    final double perimeterBgEstimate = (sortedSidesY[1] + sortedSidesY[2]) * 0.5;
+
+    double uBgEstimate = 128.0;
+    double vBgEstimate = 128.0;
+    if (uSmall != null && vSmall != null) {
+      final double topMeanU = topSumU / math.max(1, topCount);
+      final double bottomMeanU = bottomSumU / math.max(1, bottomCount);
+      final double leftMeanU = leftSumU / math.max(1, leftCount);
+      final double rightMeanU = rightSumU / math.max(1, rightCount);
+      final List<double> sortedU = [topMeanU, bottomMeanU, leftMeanU, rightMeanU]..sort();
+      uBgEstimate = (sortedU[1] + sortedU[2]) * 0.5;
+
+      final double topMeanV = topSumV / math.max(1, topCount);
+      final double bottomMeanV = bottomSumV / math.max(1, bottomCount);
+      final double leftMeanV = leftSumV / math.max(1, leftCount);
+      final double rightMeanV = rightSumV / math.max(1, rightCount);
+      final List<double> sortedV = [topMeanV, bottomMeanV, leftMeanV, rightMeanV]..sort();
+      vBgEstimate = (sortedV[1] + sortedV[2]) * 0.5;
+    }
+
+    // 2. Distribusi wilayah tengah (ROI utama dokumen/layar) dan pusat bidikan (ROI ID Card)
     final int cx0 = (w * 0.20).round();
     final int cx1 = (w * 0.80).round();
     final int cy0 = (h * 0.18).round();
@@ -584,20 +631,21 @@ class DocumentDetector {
 
     final double brightFg = math.max(centerMean, innerP90.toDouble());
     final double brightBg = math.min(
-      upperSideBorderMean,
+      perimeterBgEstimate,
       math.min(roiP25.toDouble(), roiP50.toDouble()),
     );
     final double brightContrast = brightFg - brightBg;
 
     final double darkFg = math.min(centerMean, innerP10.toDouble());
     final double darkBg = math.max(
-      upperSideBorderMean,
+      perimeterBgEstimate,
       math.max(roiP50.toDouble(), roiP75.toDouble()),
     );
     final double darkContrast = darkBg - darkFg;
 
-    final bool paperIsBrighter =
-        !(upperSideBorderMean >= 150.0 && darkContrast > brightContrast);
+    final bool isDarkObjectOnLightBg =
+        (darkContrast > brightContrast) && (perimeterBgEstimate > centerMean);
+    final bool paperIsBrighter = !isDarkObjectOnLightBg;
     final double fgEstimate = paperIsBrighter ? brightFg : darkFg;
     final double bgEstimate = paperIsBrighter ? brightBg : darkBg;
     final double contrast =
@@ -616,8 +664,11 @@ class DocumentDetector {
     }
 
     final double midPoint = (bgEstimate + fgEstimate) * 0.5;
+    final double otsuWeight = (contrast >= 65.0) ? 0.75 : 0.50;
     final int threshold =
-        ((otsuThreshold * 0.50) + (midPoint * 0.50)).round().clamp(15, 240);
+        ((otsuThreshold * otsuWeight) + (midPoint * (1.0 - otsuWeight)))
+            .round()
+            .clamp(15, 240);
 
     return _ThresholdStats(
       threshold: threshold,
@@ -1237,7 +1288,18 @@ class DocumentDetector {
       if (touchesBottom && normMinY > 0.35) {
         continue;
       }
-      if (normMinY > 0.52 && blob.centroidY > 0.64) {
+
+      // 1. Skor kepadatan persegi panjang (rectangularity)
+      final int bboxArea =
+          math.max(1, (blob.maxX - blob.minX + 1) * (blob.maxY - blob.minY + 1));
+      final double sRect = (blob.pixelCount / bboxArea).clamp(0.0, 1.0);
+      final bool isSolidRect = sRect >= 0.82;
+
+      // Jika bukan objek kotak solid, diskualifikasi jika terlalu di bawah viewfinder
+      if (!isSolidRect && normMinY > 0.52 && blob.centroidY > 0.64) {
+        continue;
+      }
+      if (normMinY > 0.68 && blob.centroidY > 0.80) {
         continue;
       }
 
@@ -1251,13 +1313,13 @@ class DocumentDetector {
         continue;
       }
 
-      // 1. Skor kedekatan dengan titik tengah bidikan (0.5, 0.5)
+      // 2. Skor kedekatan dengan titik tengah bidikan (0.5, 0.5)
       final double dxCenter = blob.centroidX - 0.5;
       final double dyCenter = blob.centroidY - 0.5;
       final double sCenter =
           math.exp(-4.0 * (dxCenter * dxCenter + dyCenter * dyCenter));
 
-      // 2. Skor area yang mendukung ID Card (3.5% - 10%) maupun dokumen penuh (A4/F4)
+      // 3. Skor area yang mendukung ID Card (3.5% - 10%), TV/Slide (10% - 75%), maupun dokumen penuh (A4/F4)
       double sArea;
       if (areaRatio < 0.08) {
         sArea = 0.72 + 0.20 * ((areaRatio - 0.030) / 0.050).clamp(0.0, 1.0);
@@ -1267,20 +1329,18 @@ class DocumentDetector {
         sArea = 0.80;
       }
 
-      // 3. Skor kepadatan persegi panjang (rectangularity)
-      final int bboxArea =
-          math.max(1, (blob.maxX - blob.minX + 1) * (blob.maxY - blob.minY + 1));
-      final double sRect = (blob.pixelCount / bboxArea).clamp(0.0, 1.0);
-
-      // 4. Penalti sentuhan tepi viewfinder & posisi bawah
+      // 4. Penalti sentuhan tepi viewfinder & posisi bawah (berkurang untuk objek kotak solid)
       double pBorder = 0.0;
       if (touchesBottom) pBorder += 0.65;
       if (touchesLeft || touchesRight) pBorder += 0.20;
       if (touchesTop) pBorder += 0.15;
-      if (normMinY > 0.45 && normMaxY > 0.88) pBorder += 0.55;
+      if (normMinY > 0.45 && normMaxY > 0.88) {
+        pBorder += isSolidRect ? 0.15 : 0.55;
+      }
 
+      // Berikan prioritas skor tinggi pada kekompakan kotak segiempat (sRect)
       final double score =
-          (0.30 * sArea) + (0.48 * sCenter) + (0.22 * sRect) - pBorder;
+          (0.26 * sArea) + (0.42 * sCenter) + (0.32 * sRect) - pBorder;
 
       if (score > bestScore) {
         bestScore = score;
@@ -2016,7 +2076,7 @@ class DocumentDetector {
     final double avgWidth = (topLen + bottomLen) * 0.5;
     final double avgHeight = (leftLen + rightLen) * 0.5;
     final double aspect = avgWidth / avgHeight;
-    if (aspect < 0.35 || aspect > 2.8) {
+    if (aspect < 0.28 || aspect > 3.5) {
       return null;
     }
 

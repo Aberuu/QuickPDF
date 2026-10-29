@@ -412,34 +412,46 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
     // Kompensasi pemendekan perspektif (foreshortening compensation)
     // Jika rasio atas/bawah < 0.88, sudut kemiringan vertikal signifikan
     final double tiltRatioV = math.min(dTop, dBottom) / math.max(1.0, math.max(dTop, dBottom));
-    if (tiltRatioV < 0.88 && rawH < rawW * 1.25) {
-      final double compFactor = (1.0 / math.max(0.45, tiltRatioV)).clamp(1.10, 1.45);
-      rawH = math.max(rawH * compFactor, rawW * 1.30);
+    if (tiltRatioV < 0.88) {
+      final double compFactorV = (1.0 / math.max(0.45, tiltRatioV)).clamp(1.10, 1.45);
+      rawH = rawH * compFactorV;
     }
 
-    // CV5-06: Auto Aspect-Ratio Snap (Standar ISO: A4 1:1.414, F4 1:1.545, ID-1 1:1.586)
+    // Jika rasio kiri/kanan < 0.88, sudut kemiringan horizontal signifikan
+    final double tiltRatioH = math.min(dLeft, dRight) / math.max(1.0, math.max(dLeft, dRight));
+    if (tiltRatioH < 0.88) {
+      final double compFactorH = (1.0 / math.max(0.45, tiltRatioH)).clamp(1.10, 1.45);
+      rawW = rawW * compFactorH;
+    }
+
+    final bool isPortrait = rawH >= rawW;
+
+    // CV5-06: Auto Aspect-Ratio Snap Multi-Kategori (Layar TV 16:9, Proyektor 16:10, Slide 4:3, ISO A4, F4, ID-1, Persegi 1:1)
     if (rawW > 10 && rawH > 10) {
-      final bool isPortrait = rawH >= rawW;
       final double measuredAspect = isPortrait ? (rawH / rawW) : (rawW / rawH);
 
-      const List<double> isoStandards = [
-        1.4142, // ISO A4 (210 x 297 mm)
-        1.5450, // Folio / F4 (215 x 330 mm)
+      const List<double> standardAspectRatios = [
+        1.7778, // Widescreen 16:9 (Layar TV, Monitor, & Slide PowerPoint/Google Slides)
+        1.6000, // Widescreen 16:10 (Layar Laptop & Proyektor Lebar)
         1.5860, // ISO/IEC 7810 ID-1 Card / KTP (85.60 x 53.98 mm)
+        1.5450, // Folio / F4 (215 x 330 mm)
+        1.4142, // ISO A4 (210 x 297 mm)
+        1.3333, // Standar 4:3 (Slide Klasik, Proyektor Kelas, & Whiteboard)
+        1.0000, // Persegi 1:1
       ];
 
       double bestTargetRatio = measuredAspect;
       double minRelDiff = double.infinity;
 
-      for (final stdRatio in isoStandards) {
+      for (final stdRatio in standardAspectRatios) {
         final double relDiff = (measuredAspect - stdRatio).abs() / stdRatio;
-        if (relDiff <= 0.06 && relDiff < minRelDiff) {
+        if (relDiff <= 0.05 && relDiff < minRelDiff) {
           minRelDiff = relDiff;
           bestTargetRatio = stdRatio;
         }
       }
 
-      if (minRelDiff <= 0.06) {
+      if (minRelDiff <= 0.05) {
         if (isPortrait) {
           rawH = rawW * bestTargetRatio;
         } else {
@@ -448,7 +460,7 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
       }
     }
 
-    final dstW = rawW.round().clamp(160, 2600);
+    final dstW = rawW.round().clamp(160, 3400);
     final dstH = rawH.round().clamp(160, 3400);
 
     // Matriks Homografi 8-DoF Closed-Form mapping unit square (0..1, 0..1) -> quadrilateral (x0..x3, y0..y3)

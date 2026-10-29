@@ -568,6 +568,288 @@ void main() {
       // Rasio tinggi / lebar wajib terkunci tepat pada rasio ISO A4 (1.414 +- 0.02)
       expect(outputAspect, closeTo(1.414, 0.025));
     });
+
+    test('Deteksi layar TV widescreen 16:9 berbezel gelap pada dinding terang (Dual-Polarity Dark on Light)', () {
+      const int w = 240;
+      const int h = 320;
+      final Uint8List luma = Uint8List(w * h);
+
+      // Dinding kelas terang luma 180, Layar TV bezel gelap luma 35 di tengah
+      for (int y = 0; y < h; y++) {
+        final double ny = y / (h - 1);
+        for (int x = 0; x < w; x++) {
+          final double nx = x / (w - 1);
+          final bool isTv = nx >= 0.08 && nx <= 0.92 && ny >= 0.323 && ny <= 0.677;
+          luma[y * w + x] = isTv ? 35 : 180;
+        }
+      }
+
+      final DetectionResult? res = DocumentDetector.detectFromLuma(luma, w, h, w);
+      expect(res, isNotNull);
+      final c = res!.corners;
+      expect((c.topLeft - const ui.Offset(0.08, 0.323)).distance, lessThan(0.05));
+      expect((c.topRight - const ui.Offset(0.92, 0.323)).distance, lessThan(0.05));
+      expect((c.bottomRight - const ui.Offset(0.92, 0.677)).distance, lessThan(0.05));
+      expect((c.bottomLeft - const ui.Offset(0.08, 0.677)).distance, lessThan(0.05));
+    });
+
+    test('Deteksi slide PowerPoint / proyektor 16:9 bercahaya pada dinding gelap (Dual-Polarity Light on Dark)', () {
+      const int w = 240;
+      const int h = 320;
+      final Uint8List luma = Uint8List(w * h);
+
+      // Dinding semi-gelap luma 45, Slide proyektor 16:9 menyala terang luma 230
+      for (int y = 0; y < h; y++) {
+        final double ny = y / (h - 1);
+        for (int x = 0; x < w; x++) {
+          final double nx = x / (w - 1);
+          final bool isSlide = nx >= 0.10 && nx <= 0.90 && ny >= 0.331 && ny <= 0.669;
+          luma[y * w + x] = isSlide ? 230 : 45;
+        }
+      }
+
+      final DetectionResult? res = DocumentDetector.detectFromLuma(luma, w, h, w);
+      expect(res, isNotNull);
+      final c = res!.corners;
+      expect((c.topLeft - const ui.Offset(0.10, 0.331)).distance, lessThan(0.05));
+      expect((c.topRight - const ui.Offset(0.90, 0.331)).distance, lessThan(0.05));
+      expect((c.bottomRight - const ui.Offset(0.90, 0.669)).distance, lessThan(0.05));
+      expect((c.bottomLeft - const ui.Offset(0.10, 0.669)).distance, lessThan(0.05));
+    });
+
+    test('Deteksi slide presentasi 4:3 klasik dan whiteboard pada dinding kelas', () {
+      const int w = 240;
+      const int h = 320;
+      final Uint8List luma = Uint8List(w * h);
+
+      // Dinding kelas luma 65, Whiteboard / slide 4:3 luma 225
+      for (int y = 0; y < h; y++) {
+        final double ny = y / (h - 1);
+        for (int x = 0; x < w; x++) {
+          final double nx = x / (w - 1);
+          final bool isBoard = nx >= 0.10 && nx <= 0.90 && ny >= 0.275 && ny <= 0.725;
+          luma[y * w + x] = isBoard ? 225 : 65;
+        }
+      }
+
+      final DetectionResult? res = DocumentDetector.detectFromLuma(luma, w, h, w);
+      expect(res, isNotNull);
+      final c = res!.corners;
+      expect((c.topLeft - const ui.Offset(0.10, 0.275)).distance, lessThan(0.05));
+      expect((c.topRight - const ui.Offset(0.90, 0.275)).distance, lessThan(0.05));
+      expect((c.bottomRight - const ui.Offset(0.90, 0.725)).distance, lessThan(0.05));
+      expect((c.bottomLeft - const ui.Offset(0.10, 0.725)).distance, lessThan(0.05));
+    });
+
+    test('Deteksi objek kotak persegi 1:1 pada latar belakang kontras', () {
+      const int w = 240;
+      const int h = 320;
+      final Uint8List luma = Uint8List(w * h);
+
+      // Latar luma 50, Kotak persegi 1:1 luma 220
+      for (int y = 0; y < h; y++) {
+        final double ny = y / (h - 1);
+        for (int x = 0; x < w; x++) {
+          final double nx = x / (w - 1);
+          final bool isSquare = nx >= 0.25 && nx <= 0.75 && ny >= 0.312 && ny <= 0.688;
+          luma[y * w + x] = isSquare ? 220 : 50;
+        }
+      }
+
+      final DetectionResult? res = DocumentDetector.detectFromLuma(luma, w, h, w);
+      expect(res, isNotNull);
+      final c = res!.corners;
+      expect((c.topLeft - const ui.Offset(0.25, 0.312)).distance, lessThan(0.05));
+      expect((c.topRight - const ui.Offset(0.75, 0.312)).distance, lessThan(0.05));
+      expect((c.bottomRight - const ui.Offset(0.75, 0.688)).distance, lessThan(0.05));
+      expect((c.bottomLeft - const ui.Offset(0.25, 0.688)).distance, lessThan(0.05));
+    });
+
+    test('SmartScannerService.processPage mempertahankan orientasi lanskap 16:9 tanpa memaksanya menjadi potret', () async {
+      final tvImg = img.Image(width: 1600, height: 900);
+      img.fill(tvImg, color: img.ColorRgb8(240, 240, 240));
+      for (int x = 200; x < 1400; x += 10) {
+        tvImg.setPixelRgb(x, 450, 20, 20, 20);
+      }
+      final sampleTv = Uint8List.fromList(img.encodeJpg(tvImg));
+
+      const tvCorners = DocumentCorners(
+        topLeft: ui.Offset(0.05, 0.05),
+        topRight: ui.Offset(0.95, 0.05),
+        bottomRight: ui.Offset(0.95, 0.95),
+        bottomLeft: ui.Offset(0.05, 0.95),
+      );
+
+      final page = ScannedPageItem(
+        id: 'test_tv_16_9',
+        sourceLabel: 'Layar TV 16:9',
+        originalBytes: sampleTv,
+        displayBytes: sampleTv,
+        corners: tvCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final processed = await SmartScannerService.processPage(
+        page,
+        corners: tvCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      expect(processed.width, greaterThan(processed.height));
+      final double aspect = processed.width / processed.height;
+      expect(aspect, closeTo(1.7778, 0.03));
+    });
+
+    test('SmartScannerService.processPage auto-snap mengunci slide 4:3 dan kotak persegi 1:1', () async {
+      // 1. Uji slide presentasi 4:3
+      final slideImg = img.Image(width: 1200, height: 900);
+      img.fill(slideImg, color: img.ColorRgb8(245, 245, 245));
+      final sampleSlide = Uint8List.fromList(img.encodeJpg(slideImg));
+
+      const defaultCorners = DocumentCorners(
+        topLeft: ui.Offset(0.05, 0.05),
+        topRight: ui.Offset(0.95, 0.05),
+        bottomRight: ui.Offset(0.95, 0.95),
+        bottomLeft: ui.Offset(0.05, 0.95),
+      );
+
+      final slidePage = ScannedPageItem(
+        id: 'test_slide_4_3',
+        sourceLabel: 'Slide 4:3',
+        originalBytes: sampleSlide,
+        displayBytes: sampleSlide,
+        corners: defaultCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final processedSlide = await SmartScannerService.processPage(
+        slidePage,
+        corners: defaultCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      expect(processedSlide.width, greaterThan(processedSlide.height));
+      final double aspectSlide = processedSlide.width / processedSlide.height;
+      expect(aspectSlide, closeTo(1.3333, 0.025));
+
+      // 2. Uji bingkai kotak persegi 1:1
+      final squareImg = img.Image(width: 1000, height: 1000);
+      img.fill(squareImg, color: img.ColorRgb8(245, 245, 245));
+      final sampleSquare = Uint8List.fromList(img.encodeJpg(squareImg));
+
+      final squarePage = ScannedPageItem(
+        id: 'test_square_1_1',
+        sourceLabel: 'Kotak 1:1',
+        originalBytes: sampleSquare,
+        displayBytes: sampleSquare,
+        corners: defaultCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final processedSquare = await SmartScannerService.processPage(
+        squarePage,
+        corners: defaultCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final double aspectSquare = processedSquare.width / processedSquare.height;
+      expect(aspectSquare, closeTo(1.0000, 0.02));
+    });
+
+    test('SmartScannerService.processPage mempertahankan rasio 1:1 pada kotak persegi bermiringan perspektif vertikal maupun horizontal', () async {
+      final squareImg = img.Image(width: 1000, height: 1000);
+      img.fill(squareImg, color: img.ColorRgb8(245, 245, 245));
+      final sampleSquare = Uint8List.fromList(img.encodeJpg(squareImg));
+
+      // 1. Kemiringan vertikal: dTop = 640, dBottom = 740 -> tiltRatioV = 0.865 < 0.88
+      // dLeft = 642, dRight = 642. Pemendekan vertikal pulih: 642 * 1.156 = 742 ~ 740.
+      const tiltedVertSquareCorners = DocumentCorners(
+        topLeft: ui.Offset(0.18, 0.18),
+        topRight: ui.Offset(0.82, 0.18),
+        bottomRight: ui.Offset(0.87, 0.82),
+        bottomLeft: ui.Offset(0.13, 0.82),
+      );
+
+      final vertPage = ScannedPageItem(
+        id: 'test_square_vert_tilt',
+        sourceLabel: 'Kotak Miring Vertikal',
+        originalBytes: sampleSquare,
+        displayBytes: sampleSquare,
+        corners: tiltedVertSquareCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final processedVert = await SmartScannerService.processPage(
+        vertPage,
+        corners: tiltedVertSquareCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final double aspectVert = processedVert.width / processedVert.height;
+      expect(aspectVert, closeTo(1.0000, 0.025));
+
+      // 2. Kemiringan horizontal: dLeft = 640, dRight = 740 -> tiltRatioH = 0.865 < 0.88
+      // dTop = 642, dBottom = 642. Pemendekan horizontal pulih: 642 * 1.156 = 742 ~ 740.
+      const tiltedHorizSquareCorners = DocumentCorners(
+        topLeft: ui.Offset(0.18, 0.18),
+        topRight: ui.Offset(0.82, 0.13),
+        bottomRight: ui.Offset(0.82, 0.87),
+        bottomLeft: ui.Offset(0.18, 0.82),
+      );
+
+      final horizPage = ScannedPageItem(
+        id: 'test_square_horiz_tilt',
+        sourceLabel: 'Kotak Miring Horizontal',
+        originalBytes: sampleSquare,
+        displayBytes: sampleSquare,
+        corners: tiltedHorizSquareCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final processedHoriz = await SmartScannerService.processPage(
+        horizPage,
+        corners: tiltedHorizSquareCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final double aspectHoriz = processedHoriz.width / processedHoriz.height;
+      expect(aspectHoriz, closeTo(1.0000, 0.025));
+    });
+
+    test('SmartScannerService.processPage mempertahankan rasio 16:9 saat slide proyektor/TV dibidik dari bawah (kemiringan sudut mahasiswa)', () async {
+      final tvImg = img.Image(width: 1600, height: 900);
+      img.fill(tvImg, color: img.ColorRgb8(240, 240, 240));
+      final sampleTv = Uint8List.fromList(img.encodeJpg(tvImg));
+
+      // Layar 16:9 dibidik dari bawah: sisi atas dTop tampak lebih pendek dari dBottom (tiltRatioV < 0.88)
+      // dTop = (0.86 - 0.14) * 1600 = 1152
+      // dBottom = (0.95 - 0.05) * 1600 = 1440 -> tiltRatioV = 1152 / 1440 = 0.80 < 0.88
+      const tiltedTvCorners = DocumentCorners(
+        topLeft: ui.Offset(0.14, 0.15),
+        topRight: ui.Offset(0.86, 0.15),
+        bottomRight: ui.Offset(0.95, 0.85),
+        bottomLeft: ui.Offset(0.05, 0.85),
+      );
+
+      final tvPage = ScannedPageItem(
+        id: 'test_tilted_tv_16_9',
+        sourceLabel: 'Layar TV 16:9 Sudut Mahasiswa',
+        originalBytes: sampleTv,
+        displayBytes: sampleTv,
+        corners: tiltedTvCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      final processedTv = await SmartScannerService.processPage(
+        tvPage,
+        corners: tiltedTvCorners,
+        filter: DocumentFilterType.original,
+      );
+
+      expect(processedTv.width, greaterThan(processedTv.height));
+      final double aspect = processedTv.width / processedTv.height;
+      expect(aspect, closeTo(1.7778, 0.035));
+    });
   });
 }
 

@@ -178,7 +178,7 @@ class AutoCaptureController {
           showLowContrastHint: false,
           statusGuidanceText: _state == ScannerState.cooldown
               ? 'Tersimpan! Ganti ke lembar berikutnya...'
-              : 'Arahkan kamera ke dokumen',
+              : 'Arahkan kamera ke layar, papan, atau dokumen',
         );
       }
 
@@ -228,8 +228,8 @@ class AutoCaptureController {
         shouldTriggerCapture: false,
         showLowContrastHint: showHint,
         statusGuidanceText: showHint
-            ? 'Coba letakkan kertas di permukaan yang lebih gelap'
-            : 'Arahkan kamera ke dokumen',
+            ? 'Coba posisikan objek pada latar yang lebih kontras'
+            : 'Arahkan kamera ke layar, papan, atau dokumen',
       );
     }
 
@@ -246,8 +246,8 @@ class AutoCaptureController {
     final bool hasGlare = detection.hasGlare;
     final double glareRatio = detection.glareRatio;
     final String activeGuidanceText = hasGlare
-        ? 'Kurangi pantulan cahaya pada dokumen'
-        : 'Tahan sebentar, memotret otomatis...';
+        ? 'Kurangi pantulan cahaya pada objek'
+        : 'Tahan stabil membidik objek...';
 
     if (_state != ScannerState.locking || _lockStartMs == null) {
       _state = ScannerState.locking;
@@ -279,8 +279,8 @@ class AutoCaptureController {
         shouldTriggerCapture: false,
         showLowContrastHint: false,
         statusGuidanceText: hasGlare
-            ? 'Kurangi pantulan cahaya pada dokumen'
-            : 'Tahan stabil di atas kertas...',
+            ? 'Kurangi pantulan cahaya pada objek'
+            : 'Tahan stabil membidik objek...',
         hasGlare: hasGlare,
         glareRatio: glareRatio,
       );
