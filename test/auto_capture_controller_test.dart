@@ -182,5 +182,85 @@ void main() {
       expect(sJump.lockProgress, equals(0.0));
       expect(sJump.shouldTriggerCapture, isFalse);
     });
+
+    test('One-Euro Filter meredam getaran halus tanpa lag saat transisi cepat', () {
+      final controller = AutoCaptureController(lockDurationMs: 800);
+
+      // t = 0ms: Frame awal di (0.10, 0.10)
+      controller.processFrame(
+        detection: sampleDetection,
+        nowMs: 0,
+      );
+
+      // t = 33ms: Pergeseran cepat ke (0.12, 0.10) (kecepatan tinggi -> cutoff membesar, respons adaptif)
+      const movedCorners = DocumentCorners(
+        topLeft: ui.Offset(0.12, 0.10),
+        topRight: ui.Offset(0.92, 0.10),
+        bottomRight: ui.Offset(0.92, 0.90),
+        bottomLeft: ui.Offset(0.12, 0.90),
+      );
+      const movedDetection = DetectionResult(
+        corners: movedCorners,
+        areaRatio: 0.64,
+        confidence: 0.92,
+      );
+
+      final sFast = controller.processFrame(
+        detection: movedDetection,
+        nowMs: 33,
+      );
+      expect(sFast.smoothedCorners, isNotNull);
+      // One-Euro merespons cepat tanpa lag besar
+      expect(sFast.smoothedCorners!.topLeft.dx, greaterThan(0.105));
+
+      // t = 66ms .. 132ms: Posisi diam dengan sedikit getaran sensor mikroskopis (+0.001)
+      const jitterCorners = DocumentCorners(
+        topLeft: ui.Offset(0.121, 0.10),
+        topRight: ui.Offset(0.921, 0.10),
+        bottomRight: ui.Offset(0.921, 0.90),
+        bottomLeft: ui.Offset(0.121, 0.90),
+      );
+      const jitterDetection = DetectionResult(
+        corners: jitterCorners,
+        areaRatio: 0.64,
+        confidence: 0.92,
+      );
+
+      controller.processFrame(
+        detection: jitterDetection,
+        nowMs: 66,
+      );
+      controller.processFrame(
+        detection: jitterDetection,
+        nowMs: 99,
+      );
+      final sQuiet = controller.processFrame(
+        detection: jitterDetection,
+        nowMs: 132,
+      );
+      expect(sQuiet.smoothedCorners, isNotNull);
+      // Saat kecepatan mendekati 0, cutoff mengecil dan posisi menjadi sangat stabil
+      expect(sQuiet.smoothedCorners!.topLeft.dx, closeTo(0.12, 0.005));
+    });
+
+    test('Menampilkan peringatan specular glare jika dokumen memiliki pantulan cahaya kuat', () {
+      final controller = AutoCaptureController(lockDurationMs: 800);
+
+      const glareDetection = DetectionResult(
+        corners: sampleCorners,
+        areaRatio: 0.64,
+        confidence: 0.92,
+        hasGlare: true,
+        glareRatio: 0.14,
+      );
+
+      final sGlare = controller.processFrame(
+        detection: glareDetection,
+        nowMs: 100,
+      );
+      expect(sGlare.hasGlare, isTrue);
+      expect(sGlare.glareRatio, equals(0.14));
+      expect(sGlare.statusGuidanceText, contains('pantulan cahaya'));
+    });
   });
 }

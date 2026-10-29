@@ -372,6 +372,37 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
       rawH = math.max(rawH * compFactor, rawW * 1.30);
     }
 
+    // CV5-06: Auto Aspect-Ratio Snap (Standar ISO: A4 1:1.414, F4 1:1.545, ID-1 1:1.586)
+    if (rawW > 10 && rawH > 10) {
+      final bool isPortrait = rawH >= rawW;
+      final double measuredAspect = isPortrait ? (rawH / rawW) : (rawW / rawH);
+
+      const List<double> isoStandards = [
+        1.4142, // ISO A4 (210 x 297 mm)
+        1.5450, // Folio / F4 (215 x 330 mm)
+        1.5860, // ISO/IEC 7810 ID-1 Card / KTP (85.60 x 53.98 mm)
+      ];
+
+      double bestTargetRatio = measuredAspect;
+      double minRelDiff = double.infinity;
+
+      for (final stdRatio in isoStandards) {
+        final double relDiff = (measuredAspect - stdRatio).abs() / stdRatio;
+        if (relDiff <= 0.06 && relDiff < minRelDiff) {
+          minRelDiff = relDiff;
+          bestTargetRatio = stdRatio;
+        }
+      }
+
+      if (minRelDiff <= 0.06) {
+        if (isPortrait) {
+          rawH = rawW * bestTargetRatio;
+        } else {
+          rawW = rawH * bestTargetRatio;
+        }
+      }
+    }
+
     final dstW = rawW.round().clamp(160, 2600);
     final dstH = rawH.round().clamp(160, 3400);
 

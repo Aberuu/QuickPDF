@@ -28,6 +28,9 @@ class AutoCaptureStepResult {
   final bool showLowContrastHint;
   final String statusGuidanceText;
 
+  final bool hasGlare;
+  final double glareRatio;
+
   const AutoCaptureStepResult({
     required this.state,
     required this.smoothedCorners,
@@ -35,6 +38,8 @@ class AutoCaptureStepResult {
     required this.shouldTriggerCapture,
     required this.showLowContrastHint,
     required this.statusGuidanceText,
+    this.hasGlare = false,
+    this.glareRatio = 0.0,
   });
 }
 
@@ -51,6 +56,10 @@ class AutoCaptureController {
   final double newSheetFingerprintDiffThreshold;
   final int noDetectionHintDelayMs;
 
+  final double oneEuroMinCutoff;
+  final double oneEuroBeta;
+  final double oneEuroDCutoff;
+
   ScannerState _state = ScannerState.searching;
   DocumentCorners? _smoothedCorners;
   int? _lockStartMs;
@@ -59,6 +68,15 @@ class AutoCaptureController {
   DocumentCorners? _lastCapturedCorners;
   Uint8List? _lastCapturedFingerprint;
   int _missingFramesInCooldown = 0;
+
+  late final _OneEuroFilter1D _tlX;
+  late final _OneEuroFilter1D _tlY;
+  late final _OneEuroFilter1D _trX;
+  late final _OneEuroFilter1D _trY;
+  late final _OneEuroFilter1D _brX;
+  late final _OneEuroFilter1D _brY;
+  late final _OneEuroFilter1D _blX;
+  late final _OneEuroFilter1D _blY;
 
   AutoCaptureController({
     this.emaAlpha = 0.35,
@@ -69,7 +87,19 @@ class AutoCaptureController {
     this.newSheetCornerShiftThreshold = 0.15,
     this.newSheetFingerprintDiffThreshold = 18.0,
     this.noDetectionHintDelayMs = 5000,
-  });
+    this.oneEuroMinCutoff = 1.2,
+    this.oneEuroBeta = 15.0,
+    this.oneEuroDCutoff = 1.0,
+  }) {
+    _tlX = _OneEuroFilter1D(minCutoff: oneEuroMinCutoff, beta: oneEuroBeta, dCutoff: oneEuroDCutoff);
+    _tlY = _OneEuroFilter1D(minCutoff: oneEuroMinCutoff, beta: oneEuroBeta, dCutoff: oneEuroDCutoff);
+    _trX = _OneEuroFilter1D(minCutoff: oneEuroMinCutoff, beta: oneEuroBeta, dCutoff: oneEuroDCutoff);
+    _trY = _OneEuroFilter1D(minCutoff: oneEuroMinCutoff, beta: oneEuroBeta, dCutoff: oneEuroDCutoff);
+    _brX = _OneEuroFilter1D(minCutoff: oneEuroMinCutoff, beta: oneEuroBeta, dCutoff: oneEuroDCutoff);
+    _brY = _OneEuroFilter1D(minCutoff: oneEuroMinCutoff, beta: oneEuroBeta, dCutoff: oneEuroDCutoff);
+    _blX = _OneEuroFilter1D(minCutoff: oneEuroMinCutoff, beta: oneEuroBeta, dCutoff: oneEuroDCutoff);
+    _blY = _OneEuroFilter1D(minCutoff: oneEuroMinCutoff, beta: oneEuroBeta, dCutoff: oneEuroDCutoff);
+  }
 
   ScannerState get state => _state;
   DocumentCorners? get smoothedCorners => _smoothedCorners;
@@ -83,6 +113,29 @@ class AutoCaptureController {
     _lastCapturedCorners = null;
     _lastCapturedFingerprint = null;
     _missingFramesInCooldown = 0;
+    _resetOneEuro();
+  }
+
+  void _resetOneEuro() {
+    _tlX.reset();
+    _tlY.reset();
+    _trX.reset();
+    _trY.reset();
+    _brX.reset();
+    _brY.reset();
+    _blX.reset();
+    _blY.reset();
+  }
+
+  void _forceOneEuroCorners(DocumentCorners c, int tMs) {
+    _tlX.forceValue(c.topLeft.dx, tMs);
+    _tlY.forceValue(c.topLeft.dy, tMs);
+    _trX.forceValue(c.topRight.dx, tMs);
+    _trY.forceValue(c.topRight.dy, tMs);
+    _brX.forceValue(c.bottomRight.dx, tMs);
+    _brY.forceValue(c.bottomRight.dy, tMs);
+    _blX.forceValue(c.bottomLeft.dx, tMs);
+    _blY.forceValue(c.bottomLeft.dy, tMs);
   }
 
   /// Memproses hasil deteksi satu frame pada waktu `nowMs` (milidetik monotonik).
@@ -180,15 +233,21 @@ class AutoCaptureController {
       );
     }
 
-    // Dokumen ber-confidence tinggi ditemukan: hitung posisi sudut terhalus (EMA) dan kestabilan
+    // Dokumen ber-confidence tinggi ditemukan: hitung posisi sudut terhalus (One-Euro Filter) dan kestabilan
     final DocumentCorners prevSmoothed = _smoothedCorners ?? detection.corners;
     final double jitter =
         _averageCornerDistance(detection.corners, prevSmoothed);
     final double singleCornerJump =
         _maxCornerDistance(detection.corners, prevSmoothed);
     final DocumentCorners nextSmoothed =
-        _applyEma(_smoothedCorners, detection.corners);
+        _applyOneEuro(detection.corners, nowMs);
     _smoothedCorners = nextSmoothed;
+
+    final bool hasGlare = detection.hasGlare;
+    final double glareRatio = detection.glareRatio;
+    final String activeGuidanceText = hasGlare
+        ? 'Kurangi pantulan cahaya pada dokumen'
+        : 'Tahan sebentar, memotret otomatis...';
 
     if (_state != ScannerState.locking || _lockStartMs == null) {
       _state = ScannerState.locking;
@@ -199,7 +258,9 @@ class AutoCaptureController {
         lockProgress: 0.0,
         shouldTriggerCapture: false,
         showLowContrastHint: false,
-        statusGuidanceText: 'Tahan sebentar, memotret otomatis...',
+        statusGuidanceText: activeGuidanceText,
+        hasGlare: hasGlare,
+        glareRatio: glareRatio,
       );
     }
 
@@ -209,6 +270,7 @@ class AutoCaptureController {
       _lockStartMs = nowMs;
       if (singleCornerJump > maxSingleCornerJump) {
         _smoothedCorners = detection.corners;
+        _forceOneEuroCorners(detection.corners, nowMs);
       }
       return AutoCaptureStepResult(
         state: ScannerState.locking,
@@ -216,7 +278,11 @@ class AutoCaptureController {
         lockProgress: 0.0,
         shouldTriggerCapture: false,
         showLowContrastHint: false,
-        statusGuidanceText: 'Tahan stabil di atas kertas...',
+        statusGuidanceText: hasGlare
+            ? 'Kurangi pantulan cahaya pada dokumen'
+            : 'Tahan stabil di atas kertas...',
+        hasGlare: hasGlare,
+        glareRatio: glareRatio,
       );
     }
 
@@ -232,6 +298,8 @@ class AutoCaptureController {
         shouldTriggerCapture: true,
         showLowContrastHint: false,
         statusGuidanceText: 'Memotret & memotong otomatis...',
+        hasGlare: hasGlare,
+        glareRatio: glareRatio,
       );
     }
 
@@ -241,7 +309,9 @@ class AutoCaptureController {
       lockProgress: progress,
       shouldTriggerCapture: false,
       showLowContrastHint: false,
-      statusGuidanceText: 'Tahan sebentar, memotret otomatis...',
+      statusGuidanceText: activeGuidanceText,
+      hasGlare: hasGlare,
+      glareRatio: glareRatio,
     );
   }
 
@@ -306,5 +376,83 @@ class AutoCaptureController {
       diffSum += (a[i] - b[i]).abs();
     }
     return diffSum / len;
+  }
+
+  DocumentCorners _applyOneEuro(DocumentCorners current, int nowMs) {
+    return DocumentCorners(
+      topLeft: ui.Offset(
+        _tlX.filter(current.topLeft.dx, nowMs),
+        _tlY.filter(current.topLeft.dy, nowMs),
+      ),
+      topRight: ui.Offset(
+        _trX.filter(current.topRight.dx, nowMs),
+        _trY.filter(current.topRight.dy, nowMs),
+      ),
+      bottomRight: ui.Offset(
+        _brX.filter(current.bottomRight.dx, nowMs),
+        _brY.filter(current.bottomRight.dy, nowMs),
+      ),
+      bottomLeft: ui.Offset(
+        _blX.filter(current.bottomLeft.dx, nowMs),
+        _blY.filter(current.bottomLeft.dy, nowMs),
+      ),
+    );
+  }
+}
+
+/// Filter adaptif One-Euro (1€) untuk 1D signal.
+/// Menyesuaikan frekuensi cutoff secara dinamis berdasarkan kecepatan turunan sinyal.
+class _OneEuroFilter1D {
+  final double minCutoff;
+  final double beta;
+  final double dCutoff;
+
+  double? _xPrev;
+  double _dxPrev = 0.0;
+  int? _tPrevMs;
+
+  _OneEuroFilter1D({
+    this.minCutoff = 1.2,
+    this.beta = 15.0,
+    this.dCutoff = 1.0,
+  });
+
+  void reset() {
+    _xPrev = null;
+    _dxPrev = 0.0;
+    _tPrevMs = null;
+  }
+
+  void forceValue(double x, int tMs) {
+    _xPrev = x;
+    _dxPrev = 0.0;
+    _tPrevMs = tMs;
+  }
+
+  double filter(double x, int tMs) {
+    if (_xPrev == null || _tPrevMs == null) {
+      _xPrev = x;
+      _dxPrev = 0.0;
+      _tPrevMs = tMs;
+      return x;
+    }
+
+    final double dt = math.max(1e-3, (tMs - _tPrevMs!) / 1000.0);
+    _tPrevMs = tMs;
+
+    final double dx = (x - _xPrev!) / dt;
+    final double edx = _alpha(dt, dCutoff) * dx + (1.0 - _alpha(dt, dCutoff)) * _dxPrev;
+    _dxPrev = edx;
+
+    final double cutoff = minCutoff + beta * edx.abs();
+    final double a = _alpha(dt, cutoff);
+    final double filteredX = a * x + (1.0 - a) * _xPrev!;
+    _xPrev = filteredX;
+    return filteredX;
+  }
+
+  static double _alpha(double dt, double cutoff) {
+    final double tau = 1.0 / (2.0 * math.pi * cutoff);
+    return 1.0 / (1.0 + tau / dt);
   }
 }

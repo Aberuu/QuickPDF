@@ -571,12 +571,29 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           final int height = image.height;
           final int rowStride = yPlane.bytesPerRow;
 
+          Uint8List? uCopy;
+          Uint8List? vCopy;
+          int uvRowStride = 0;
+          int uvPixelStride = 1;
+          if (image.planes.length >= 3) {
+            try {
+              uCopy = Uint8List.fromList(image.planes[1].bytes);
+              vCopy = Uint8List.fromList(image.planes[2].bytes);
+              uvRowStride = image.planes[1].bytesPerRow;
+              uvPixelStride = image.planes[1].bytesPerPixel ?? 1;
+            } catch (_) {}
+          }
+
           _processLumaFrame(
             luma: lumaCopy,
             width: width,
             height: height,
             rowStride: rowStride,
             sensorOrientation: _sensorOrientation,
+            uPlane: uCopy,
+            vPlane: vCopy,
+            uvRowStride: uvRowStride,
+            uvPixelStride: uvPixelStride,
           );
         });
         return;
@@ -712,6 +729,10 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     required int height,
     required int rowStride,
     required int sensorOrientation,
+    Uint8List? uPlane,
+    Uint8List? vPlane,
+    int uvRowStride = 0,
+    int uvPixelStride = 1,
   }) async {
     _isDetectingFrame = true;
     try {
@@ -721,6 +742,10 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
         height,
         rowStride,
         sensorOrientation: sensorOrientation,
+        uPlane: uPlane,
+        vPlane: vPlane,
+        uvRowStride: uvRowStride,
+        uvPixelStride: uvPixelStride,
       );
       final Uint8List fp = DocumentDetector.fingerprint(
         luma,

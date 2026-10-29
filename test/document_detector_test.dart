@@ -27,6 +27,9 @@ void main() {
         }
       }
 
+      // Pemanasan (warm-up) JIT satu kali untuk mengukur latensi frame steady-state
+      DocumentDetector.detectFromLuma(luma, w, h, w);
+
       final Stopwatch sw = Stopwatch()..start();
       final DetectionResult? res = DocumentDetector.detectFromLuma(luma, w, h, w);
       sw.stop();
@@ -485,6 +488,85 @@ void main() {
       }
 
       expect(DocumentDetector.detectFromLuma(glareLuma, w, h, w), isNull);
+    });
+
+    test('4-Side IRLS Line Intersection mengekstrapolasi sudut membulat ke titik potong garis lurus matematis', () {
+      const int w = 240;
+      const int h = 320;
+      final Uint8List luma = Uint8List(w * h);
+
+      // Kartu berukuran [0.20..0.80, 0.25..0.75] dengan sudut membulat (lingkaran jari-jari 0.05 di 4 pojok)
+      for (int y = 0; y < h; y++) {
+        final double ny = y / (h - 1);
+        for (int x = 0; x < w; x++) {
+          final double nx = x / (w - 1);
+          bool inside = false;
+          if (nx >= 0.20 && nx <= 0.80 && ny >= 0.25 && ny <= 0.75) {
+            inside = true;
+            const r = 0.05;
+            if (nx < 0.20 + r && ny < 0.25 + r) {
+              final dx = nx - (0.20 + r);
+              final dy = ny - (0.25 + r);
+              if (dx * dx + dy * dy > r * r) inside = false;
+            } else if (nx > 0.80 - r && ny < 0.25 + r) {
+              final dx = nx - (0.80 - r);
+              final dy = ny - (0.25 + r);
+              if (dx * dx + dy * dy > r * r) inside = false;
+            } else if (nx > 0.80 - r && ny > 0.75 - r) {
+              final dx = nx - (0.80 - r);
+              final dy = ny - (0.75 - r);
+              if (dx * dx + dy * dy > r * r) inside = false;
+            } else if (nx < 0.20 + r && ny > 0.75 - r) {
+              final dx = nx - (0.20 + r);
+              final dy = ny - (0.75 - r);
+              if (dx * dx + dy * dy > r * r) inside = false;
+            }
+          }
+          luma[y * w + x] = inside ? 236 : 42;
+        }
+      }
+
+      final res = DocumentDetector.detectFromLuma(luma, w, h, w);
+      expect(res, isNotNull);
+      // IRLS line intersection harus mengekstrapolasi kembali ke sudut tajam (0.20, 0.25), bukan meleset ke dalam kurva
+      expect((res!.corners.topLeft - const ui.Offset(0.20, 0.25)).distance, lessThan(0.04));
+      expect((res.corners.topRight - const ui.Offset(0.80, 0.25)).distance, lessThan(0.04));
+      expect((res.corners.bottomRight - const ui.Offset(0.80, 0.75)).distance, lessThan(0.04));
+      expect((res.corners.bottomLeft - const ui.Offset(0.20, 0.75)).distance, lessThan(0.04));
+    });
+
+    test('SmartScannerService Auto Aspect-Ratio Snap mengunci ke rasio standar ISO A4 (1:1.414)', () async {
+      final sample = SmartScannerService.generateSampleSheetBytes(templateIndex: 0);
+
+      // Sudut dengan rasio terukur ~1.41 (dalam selisih 0.3% terhadap ISO A4 1.4142)
+      // Dimensi sampel: 900 x 1200 px
+      // Lebar = (0.85 - 0.15) * 900 = 630 px
+      // Tinggi = (0.86 - 0.12) * 1200 = 888 px -> 888 / 630 = 1.4095
+      const a4Corners = DocumentCorners(
+        topLeft: ui.Offset(0.15, 0.12),
+        topRight: ui.Offset(0.85, 0.12),
+        bottomRight: ui.Offset(0.85, 0.86),
+        bottomLeft: ui.Offset(0.15, 0.86),
+      );
+
+      final page = ScannedPageItem(
+        id: 'test_iso_snap',
+        sourceLabel: 'Uji ISO Snap',
+        originalBytes: sample,
+        displayBytes: sample,
+        corners: a4Corners,
+        filter: DocumentFilterType.original,
+      );
+
+      final processed = await SmartScannerService.processPage(
+        page,
+        corners: a4Corners,
+        filter: DocumentFilterType.original,
+      );
+
+      final double outputAspect = processed.height / processed.width;
+      // Rasio tinggi / lebar wajib terkunci tepat pada rasio ISO A4 (1.414 +- 0.02)
+      expect(outputAspect, closeTo(1.414, 0.025));
     });
   });
 }
