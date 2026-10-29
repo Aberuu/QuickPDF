@@ -534,6 +534,17 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
       }
     }
     working = warped;
+  } else {
+    // Batasi dimensi maksimum citra full-frame agar konsumsi memori isolate aman pada HP menengah-bawah
+    const int maxFullFrameDim = 3200;
+    final int maxD = math.max(working.width, working.height);
+    if (maxD > maxFullFrameDim) {
+      if (working.width >= working.height) {
+        working = img.copyResize(working, width: maxFullFrameDim, interpolation: img.Interpolation.linear);
+      } else {
+        working = img.copyResize(working, height: maxFullFrameDim, interpolation: img.Interpolation.linear);
+      }
+    }
   }
 
   // Rotasi 90 derajat ditangani secara instan via AnimatedRotation di UI
@@ -586,12 +597,15 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
         }
       }
     } else {
-      // Estimasi peta latar belakang pencahayaan lokal (grid 24 x 32) untuk mengangkat bayangan
-      const int gridCols = 24;
-      const int gridRows = 32;
-      final List<double> bgGrid = List<double>.filled(gridCols * gridRows, 220.0);
+      final bool isEnhanced = (filter == 'enhanced' || filter == 'magic');
+      final bool isGray = (filter == 'gray');
 
-      if (filter == 'magic' || filter == 'gray') {
+      if (isEnhanced || isGray) {
+        // 1. Estimasi Peta Latar Belakang Pencahayaan Lokal (Grid 24 x 32) untuk Pengangkatan Bayangan
+        const int gridCols = 24;
+        const int gridRows = 32;
+        final List<double> rawBgGrid = List<double>.filled(gridCols * gridRows, 220.0);
+
         for (int gy = 0; gy < gridRows; gy++) {
           final int startY = (gy * imgH / gridRows).round();
           final int endY = ((gy + 1) * imgH / gridRows).round().clamp(startY + 1, imgH);
@@ -617,27 +631,49 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
               }
             }
             final double avgL = countTop > 0 ? (sumTop / countTop) : maxL;
-            bgGrid[gy * gridCols + gx] = math.max(110.0, 0.4 * avgL + 0.6 * maxL);
+            rawBgGrid[gy * gridCols + gx] = math.max(100.0, 0.35 * avgL + 0.65 * maxL);
           }
         }
-      }
 
-      final double invImgW = 1.0 / math.max(1, imgW - 1);
-      final double invImgH = 1.0 / math.max(1, imgH - 1);
+        // Perhalus grid latar belakang 3x3 agar transisi bayangan mulus tanpa artifak petak
+        final List<double> bgGrid = List<double>.filled(gridCols * gridRows, 220.0);
+        for (int gy = 0; gy < gridRows; gy++) {
+          for (int gx = 0; gx < gridCols; gx++) {
+            double sumVal = 0;
+            int count = 0;
+            for (int dy = -1; dy <= 1; dy++) {
+              final int ny = gy + dy;
+              if (ny < 0 || ny >= gridRows) continue;
+              for (int dx = -1; dx <= 1; dx++) {
+                final int nx = gx + dx;
+                if (nx < 0 || nx >= gridCols) continue;
+                sumVal += rawBgGrid[ny * gridCols + nx];
+                count++;
+              }
+            }
+            bgGrid[gy * gridCols + gx] = count > 0 ? (sumVal / count) : rawBgGrid[gy * gridCols + gx];
+          }
+        }
 
-      for (int y = 0; y < working.height; y++) {
-        final double gY = (y * invImgH) * (gridRows - 1);
-        final int gyi = gY.floor().clamp(0, gridRows - 2);
-        final double gYf = gY - gyi;
+        final double invImgW = 1.0 / math.max(1, imgW - 1);
+        final double invImgH = 1.0 / math.max(1, imgH - 1);
 
-        for (int x = 0; x < working.width; x++) {
-          final p = working.getPixel(x, y);
-          double r = p.r.toDouble();
-          double g = p.g.toDouble();
-          double b = p.b.toDouble();
+        // Buffer Luminansi sementara untuk konvolusi Unsharp Masking 2D spasial
+        final Uint8List normLuma = Uint8List(imgW * imgH);
 
-          if (filter == 'magic') {
-            // Enhanced: Normalisasi bayangan lokal, putihkan latar kertas, pertajam tinta warna & tulisan
+        // Pass 1: Normalisasi bayangan lokal, pemutihan latar kertas, dan penguatan kontras tinta
+        for (int y = 0; y < imgH; y++) {
+          final double gY = (y * invImgH) * (gridRows - 1);
+          final int gyi = gY.floor().clamp(0, gridRows - 2);
+          final double gYf = gY - gyi;
+          final int rowOffset = y * imgW;
+
+          for (int x = 0; x < imgW; x++) {
+            final p = working.getPixel(x, y);
+            double r = p.r.toDouble();
+            double g = p.g.toDouble();
+            double b = p.b.toDouble();
+
             final double gX = (x * invImgW) * (gridCols - 1);
             final int gxi = gX.floor().clamp(0, gridCols - 2);
             final double gXf = gX - gxi;
@@ -651,43 +687,167 @@ _ProcessOutput _processImageIsolate(_ProcessPayload payload) {
                 (1 - gXf) * gYf * b01 +
                 gXf * gYf * b11;
 
-            final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
-            final double normLum = (lum / math.max(60.0, localBg)) * 255.0;
+            if (isEnhanced) {
+              // 1. Normalisasi pencahayaan lokal terhadap kertas putih setempat
+              final double normFactor = 255.0 / math.max(60.0, localBg);
+              double rNorm = (r * normFactor).clamp(0.0, 255.0);
+              double gNorm = (g * normFactor).clamp(0.0, 255.0);
+              double bNorm = (b * normFactor).clamp(0.0, 255.0);
 
-            if (normLum >= 195) {
-              // Area kertas: angkat menjadi putih bersih, hapus bayangan tangan/ruangan
-              final double boost = ((normLum - 195) / 60.0).clamp(0.0, 1.0);
-              final double whiteFactor = 255.0 / math.max(70.0, localBg);
-              r = (r * whiteFactor).clamp(0.0, 255.0);
-              g = (g * whiteFactor).clamp(0.0, 255.0);
-              b = (b * whiteFactor).clamp(0.0, 255.0);
-              r = r + (255 - r) * (0.80 * boost);
-              g = g + (255 - g) * (0.80 * boost);
-              b = b + (255 - b) * (0.80 * boost);
+              final double lumNorm = 0.299 * rNorm + 0.587 * gNorm + 0.114 * bNorm;
+              final double maxC = math.max(rNorm, math.max(gNorm, bNorm));
+              final double minC = math.min(rNorm, math.min(gNorm, bNorm));
+              final double chroma = maxC - minC;
+
+              if (chroma <= 24.0) {
+                // Tonalitas netral (kertas, tulisan pensil, pulpen hitam, teks cetak)
+                if (lumNorm >= 185.0) {
+                  // Latar kertas: angkat bayangan dan bersihkan kekuningan menjadi putih bersih
+                  final double boost = ((lumNorm - 185.0) / 70.0).clamp(0.0, 1.0);
+                  rNorm = (rNorm + (255.0 - rNorm) * boost).clamp(0.0, 255.0);
+                  gNorm = (gNorm + (255.0 - gNorm) * boost).clamp(0.0, 255.0);
+                  bNorm = (bNorm + (255.0 - bNorm) * boost).clamp(0.0, 255.0);
+                } else {
+                  // Text Stroke Intensifier: penguatan kontras kurva gelap tinta (pensil pudar, pulpen tipis)
+                  final double t = (lumNorm / 185.0).clamp(0.0, 1.0);
+                  final double s = (0.40 + 0.60 * t * t);
+                  rNorm = (rNorm * s).clamp(0.0, 255.0);
+                  gNorm = (gNorm * s).clamp(0.0, 255.0);
+                  bNorm = (bNorm * s).clamp(0.0, 255.0);
+                }
+              } else {
+                // Tonalitas kromatik berwarna (stempel merah, pulpen biru, spidol stabilo, bagan warna)
+                // Pertahankan warna cerah asli dan tingkatkan saturasi agar tidak kusam/gelap
+                final double l = 0.299 * rNorm + 0.587 * gNorm + 0.114 * bNorm;
+                final double satBoost = (lumNorm >= 185.0) ? 1.15 : 1.25;
+                rNorm = (l + (rNorm - l) * satBoost).clamp(0.0, 255.0);
+                gNorm = (l + (gNorm - l) * satBoost).clamp(0.0, 255.0);
+                bNorm = (l + (bNorm - l) * satBoost).clamp(0.0, 255.0);
+              }
+
+              r = rNorm;
+              g = gNorm;
+              b = bNorm;
             } else {
-              // Area teks / tinta tulisan / stempel: pertajam kontras warna asli
-              final double inkFactor = (normLum / 195.0).clamp(0.0, 1.0);
-              r = (r * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
-              g = (g * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
-              b = (b * (0.68 + 0.32 * inkFactor)).clamp(0.0, 255.0);
+              // Mode Grayscale
+              final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
+              final double normFactor = 255.0 / math.max(60.0, localBg);
+              final double normLum = (lum * normFactor).clamp(0.0, 255.0);
+
+              double gVal;
+              if (normLum >= 185.0) {
+                final double boost = ((normLum - 185.0) / 70.0).clamp(0.0, 1.0);
+                gVal = (normLum + (255.0 - normLum) * boost).clamp(0.0, 255.0);
+              } else {
+                final double t = (normLum / 185.0).clamp(0.0, 1.0);
+                final double s = (0.40 + 0.60 * t * t);
+                gVal = (normLum * s).clamp(0.0, 255.0);
+              }
+              r = gVal;
+              g = gVal;
+              b = gVal;
             }
-          } else if (filter == 'gray') {
-            // Skala Abu-abu Tajam
-            final lum = 0.299 * r + 0.587 * g + 0.114 * b;
-            final stretched = ((lum - 128) * 1.28 + 134).clamp(0.0, 255.0);
-            r = stretched;
-            g = stretched;
-            b = stretched;
-          }
 
-          // Penyesuaian manual kecerahan & kontras jika disetel pengguna
-          if (bOffset != 0 || (cFactor - 1.0).abs() > 0.01) {
-            r = ((r - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
-            g = ((g - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
-            b = ((b - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
-          }
+            // Penyesuaian manual kecerahan & kontras jika disetel pengguna
+            if (bOffset != 0 || (cFactor - 1.0).abs() > 0.01) {
+              r = ((r - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+              g = ((g - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+              b = ((b - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+            }
 
-          working.setPixelRgb(x, y, r.round().clamp(0, 255), g.round().clamp(0, 255), b.round().clamp(0, 255));
+            final int rInt = r.round().clamp(0, 255);
+            final int gInt = g.round().clamp(0, 255);
+            final int bInt = b.round().clamp(0, 255);
+
+            working.setPixelRgb(x, y, rInt, gInt, bInt);
+            normLuma[rowOffset + x] =
+                (0.299 * rInt + 0.587 * gInt + 0.114 * bInt).round().clamp(0, 255);
+          }
+        }
+
+        // Pass 2: Konvolusi Spasial 2D Unsharp Masking Teks Dokumen
+        // Kernel Unsharp Mask ortogonal berbasis Luminansi:
+        // [  0,   -0.5,   0  ]
+        // [ -0.5,  3.0, -0.5 ]
+        // [  0,   -0.5,   0  ]
+        // Diterapkan pada saluran Luminansi (dY) agar goresan tulisan tajam renyah
+        // tanpa merusak hue/saturasi warna asli stempel, pulpen biru, atau stabilo.
+        // Gradien adaptif: hanya menajamkan batas huruf (gradien > 12)
+        // dan membiarkan latar kertas bersih tetap bebas dari bintik derau (noise-free).
+        const double lambda = 0.50;
+
+        for (int y = 0; y < imgH; y++) {
+          final int yTop = (y > 0) ? (y - 1) : y;
+          final int yBottom = (y < imgH - 1) ? (y + 1) : y;
+          final int rowOffset = y * imgW;
+          final int rowTop = yTop * imgW;
+          final int rowBottom = yBottom * imgW;
+
+          for (int x = 0; x < imgW; x++) {
+            final int xLeft = (x > 0) ? (x - 1) : x;
+            final int xRight = (x < imgW - 1) ? (x + 1) : x;
+
+            final int idxC = rowOffset + x;
+            final int idxT = rowTop + x;
+            final int idxB = rowBottom + x;
+            final int idxL = rowOffset + xLeft;
+            final int idxR = rowOffset + xRight;
+
+            final int lumC = normLuma[idxC];
+            final int lumT = normLuma[idxT];
+            final int lumB = normLuma[idxB];
+            final int lumL = normLuma[idxL];
+            final int lumR = normLuma[idxR];
+
+            final int diffL = (lumC - lumL).abs();
+            final int diffR = (lumC - lumR).abs();
+            final int diffT = (lumC - lumT).abs();
+            final int diffB = (lumC - lumB).abs();
+            final int maxGrad = math.max(
+              math.max(diffL, diffR),
+              math.max(diffT, diffB),
+            );
+
+            if (maxGrad < 12) {
+              continue;
+            }
+
+            final double edgeWeight = ((maxGrad - 12.0) / 16.0).clamp(0.0, 1.0);
+            final double laplacianLuma = (4.0 * lumC - (lumT + lumB + lumL + lumR));
+            final double lumSharp = (lumC + edgeWeight * lambda * laplacianLuma).clamp(0.0, 255.0);
+            final double dY = lumSharp - lumC;
+
+            final p = working.getPixel(x, y);
+            final int rSharp = (p.r + dY).round().clamp(0, 255);
+            final int gSharp = (p.g + dY).round().clamp(0, 255);
+            final int bSharp = (p.b + dY).round().clamp(0, 255);
+
+            working.setPixelRgb(x, y, rSharp, gSharp, bSharp);
+          }
+        }
+      } else {
+        // Mode Original dengan penyesuaian kecerahan/kontras manual
+        for (int y = 0; y < imgH; y++) {
+          for (int x = 0; x < imgW; x++) {
+            final p = working.getPixel(x, y);
+            double r = p.r.toDouble();
+            double g = p.g.toDouble();
+            double b = p.b.toDouble();
+
+            if (bOffset != 0 || (cFactor - 1.0).abs() > 0.01) {
+              r = ((r - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+              g = ((g - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+              b = ((b - 128) * cFactor + 128 + bOffset).clamp(0.0, 255.0);
+            }
+
+            working.setPixelRgb(
+              x,
+              y,
+              r.round().clamp(0, 255),
+              g.round().clamp(0, 255),
+              b.round().clamp(0, 255),
+            );
+          }
         }
       }
     }

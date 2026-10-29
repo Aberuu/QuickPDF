@@ -68,6 +68,19 @@ class _SmartScannerSheetState extends State<SmartScannerSheet> {
     });
   }
 
+  String _getFilterChipLabel(DocumentFilterType f) {
+    switch (f) {
+      case DocumentFilterType.magicColor:
+        return 'Enhanced (Teks Tajam)';
+      case DocumentFilterType.blackAndWhite:
+        return 'B&W (Fotokopi)';
+      case DocumentFilterType.grayscaleSharpen:
+        return 'Grayscale';
+      case DocumentFilterType.original:
+        return 'Original';
+    }
+  }
+
   Future<void> _runAutoEdgeDetection() async {
     final detected = SmartScannerService.detectDocumentCorners(
       widget.pageItem.originalBytes,
@@ -253,7 +266,7 @@ class _SmartScannerSheetState extends State<SmartScannerSheet> {
                           padding: const EdgeInsets.only(right: 8),
                           child: ChoiceChip(
                             selected: selected,
-                            label: Text(f.label),
+                            label: Text(_getFilterChipLabel(f)),
                             onSelected: _isProcessing
                                 ? null
                                 : (_) {

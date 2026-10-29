@@ -91,7 +91,7 @@ enum QualityPreset {
 enum DocumentFilterType {
   original('original', 'Original', 'Warna foto asli tanpa filter'),
   blackAndWhite('bw', 'B&W', 'Sauvola adaptive binarization, teks hitam pekat fotokopi'),
-  magicColor('enhanced', 'Enhanced', 'Pembersihan bayangan adaptif & latar kertas putih bersih'),
+  magicColor('enhanced', 'Enhanced', 'Penajaman teks, pembersihan bayangan & latar kertas putih bersih'),
   grayscaleSharpen('gray', 'Grayscale', 'Skala abu-abu tajam');
 
   final String code;
