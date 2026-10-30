@@ -850,6 +850,65 @@ void main() {
       final double aspect = processedTv.width / processedTv.height;
       expect(aspect, closeTo(1.7778, 0.035));
     });
+
+    test('Zhang & He (2006) 3D Projective Aspect Ratio pemulihan analitik tertutup', () {
+      // 1. Kotak persegi tegak 800x800 di tengah gambar 1600x1200
+      final uprightSquare = [
+        const math.Point<double>(400, 200),
+        const math.Point<double>(1200, 200),
+        const math.Point<double>(1200, 1000),
+        const math.Point<double>(400, 1000),
+      ];
+      final double? squareRatio = SmartScannerService.estimateProjectiveAspectRatio(
+        uprightSquare,
+        1600,
+        1200,
+      );
+      expect(squareRatio, isNotNull);
+      expect(squareRatio!, closeTo(1.0, 0.05));
+
+      // 2. Lembar A4 (rasio W/H = 210/297 = 0.7071)
+      final uprightA4 = [
+        const math.Point<double>(450, 150),
+        const math.Point<double>(1150, 150), // W = 700
+        const math.Point<double>(1150, 1140), // H = 990 -> W/H = 700 / 990 = 0.7071
+        const math.Point<double>(450, 1140),
+      ];
+      final double? a4Ratio = SmartScannerService.estimateProjectiveAspectRatio(
+        uprightA4,
+        1600,
+        1200,
+      );
+      expect(a4Ratio, isNotNull);
+      expect(a4Ratio!, closeTo(0.7071, 0.05));
+
+      // 3. Layar Widescreen 16:9 (rasio W/H = 16/9 = 1.7778) dengan kemiringan perspektif
+      final tilted169 = [
+        const math.Point<double>(300, 250),
+        const math.Point<double>(1300, 250), // W_top = 1000
+        const math.Point<double>(1400, 800),  // W_bottom = 1200
+        const math.Point<double>(200, 800),
+      ];
+      final double? wideRatio = SmartScannerService.estimateProjectiveAspectRatio(
+        tilted169,
+        1600,
+        1200,
+      );
+      expect(wideRatio, isNotNull);
+      expect(wideRatio!, greaterThan(1.4));
+    });
+
+    test('Line-Pair Rejection membedakan batas kertas dengan garis cetakan tabel', () {
+      // 1. Tepi batas kertas tunggal (lonjakan gradien satu arah)
+      final singleStep = <double>[0, 4, 12, 45, 15, 6, 0, 0, 0];
+      final bool isPaperStep = DocumentDetector.isPrintedLinePair(singleStep, 3, 45.0);
+      expect(isPaperStep, isFalse); // Bukan garis cetakan tabel
+
+      // 2. Garis cetakan tabel (garis gelap diapit latar terang: satu positif, satu negatif dalam jarak <= 4 px)
+      final printedLine = <double>[0, -38, -10, 0, 8, 42, 12, 0];
+      final bool isTableBorder = DocumentDetector.isPrintedLinePair(printedLine, 5, 42.0);
+      expect(isTableBorder, isTrue); // Berhasil ditandai sebagai garis cetakan tabel
+    });
   });
 }
 

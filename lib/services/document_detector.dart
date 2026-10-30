@@ -30,6 +30,30 @@ class DetectionResult {
 /// 5. Coarse-to-Fine 1D Normal Sub-Pixel Refinement
 /// 6. Auto Aspect-Ratio Snap & Specular Glare Detection
 class DocumentDetector {
+  /// Deteksi apakah suatu puncak gradien pada profil normal merupakan garis cetakan tabel / box
+  /// (yaitu puncak dengan gradien lawan arah serupa dalam jarak <= 4 px).
+  /// Diadaptasi dari makeacopy (EdgeSnapCornerRefiner.isPrintedLine).
+  static bool isPrintedLinePair(
+    List<double> signedProfile,
+    int peakIdx,
+    double peakMag, {
+    int distance = 4,
+    double fraction = 0.50,
+  }) {
+    if (peakIdx < 0 || peakIdx >= signedProfile.length || peakMag <= 0.0) {
+      return false;
+    }
+    final double sign = signedProfile[peakIdx] > 0 ? 1.0 : -1.0;
+    final int from = math.max(0, peakIdx - distance);
+    final int to = math.min(signedProfile.length - 1, peakIdx + distance);
+    for (int j = from; j <= to; j++) {
+      if (signedProfile[j] * sign < 0 && signedProfile[j].abs() >= fraction * peakMag) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Mendeteksi 4 sudut dokumen dari buffer luminansi (Y-plane YUV420 atau grayscale)
   /// dengan dukungan opsional bidang krominansi U dan V untuk deteksi Chroma-Aware.
   static DetectionResult? detectFromLuma(
@@ -2274,19 +2298,23 @@ class DocumentDetector {
       final double nx = -dy / len;
       final double ny = dx / len;
 
-      const int numSamples = 10;
+      const int numSamples = 12;
       final List<math.Point<double>> subPixelPts = [];
 
-      const int searchRadius = 4;
+      const int searchRadius = 6;
+      final int profileLen = 2 * searchRadius + 3;
+      final int offset = searchRadius + 1;
+
       for (int s = 1; s <= numSamples; s++) {
-        final double t = (s + 0.5) / (numSamples + 1.0);
+        // Margin ujung 10% (EDGE_END_MARGIN = 0.10): abaikan area dekat sudut yang rawan melengkung/terhalang jari
+        final double t = 0.10 + (s / (numSamples + 1.0)) * 0.80;
         final double px = ax + t * dx;
         final double py = ay + t * dy;
 
         double maxGrad = -1.0;
         int bestR = 0;
-        final List<double> gradProfile = List<double>.filled(2 * searchRadius + 3, 0.0);
-        final int offset = searchRadius + 1;
+        final List<double> gradProfile = List<double>.filled(profileLen, 0.0);
+        final List<double> signedProfile = List<double>.filled(profileLen, 0.0);
 
         for (int r = -searchRadius - 1; r <= searchRadius + 1; r++) {
           final int xP1 = (px + (r + 1) * nx).round();
@@ -2296,7 +2324,9 @@ class DocumentDetector {
 
           final int valP1 = getPixel(xP1, yP1);
           final int valM1 = getPixel(xM1, yM1);
-          final double g = (valP1 - valM1).abs().toDouble();
+          final double signed = (valP1 - valM1).toDouble();
+          final double g = signed.abs();
+          signedProfile[r + offset] = signed;
           gradProfile[r + offset] = g;
 
           if (r >= -searchRadius && r <= searchRadius && g > maxGrad) {
@@ -2305,21 +2335,54 @@ class DocumentDetector {
           }
         }
 
-        if (maxGrad >= 18.0) {
-          final int idx = bestR + offset;
-          final double gPrev = gradProfile[idx - 1];
-          final double gCurr = gradProfile[idx];
-          final double gNext = gradProfile[idx + 1];
-          final double denom = 2.0 * (gPrev - 2.0 * gCurr + gNext);
-          double deltaR = 0.0;
-          if (denom.abs() > 1e-4) {
-            deltaR = ((gPrev - gNext) / denom).clamp(-0.8, 0.8);
+        if (maxGrad < 18.0) continue;
+
+        // Line-Pair Rejection & Nearest Prominent Peak Preference Ala makeacopy
+        int selectedR = bestR;
+
+        final bool bestIsLine = isPrintedLinePair(signedProfile, bestR + offset, maxGrad);
+        if (bestIsLine) {
+          // Puncak terkuat merupakan garis cetakan tabel; cari puncak tepi lain yang valid
+          double altMax = -1.0;
+          int altR = 0;
+          for (int r = -searchRadius; r <= searchRadius; r++) {
+            final double g = gradProfile[r + offset];
+            if (g >= 18.0 && g > altMax && !isPrintedLinePair(signedProfile, r + offset, g)) {
+              altMax = g;
+              altR = r;
+            }
           }
-          final double subR = bestR + deltaR;
-          subPixelPts.add(
-            math.Point<double>(px + subR * nx, py + subR * ny),
-          );
+          if (altMax >= 18.0) {
+            selectedR = altR;
+          } else {
+            continue; // Lewati jika seluruh puncak hanya berupa garis cetakan tabel
+          }
+        } else {
+          // Preferensi puncak terdekat (Nearest Peak) jika ada puncak lokal lebih dekat ke batas awal
+          for (int r = -searchRadius; r <= searchRadius; r++) {
+            final double g = gradProfile[r + offset];
+            if (r.abs() < selectedR.abs() &&
+                g >= 0.50 * maxGrad &&
+                !isPrintedLinePair(signedProfile, r + offset, g)) {
+              selectedR = r;
+              break;
+            }
+          }
         }
+
+        final int idx = selectedR + offset;
+        final double gPrev = gradProfile[idx - 1];
+        final double gCurr = gradProfile[idx];
+        final double gNext = gradProfile[idx + 1];
+        final double denom = 2.0 * (gPrev - 2.0 * gCurr + gNext);
+        double deltaR = 0.0;
+        if (denom.abs() > 1e-4) {
+          deltaR = ((gPrev - gNext) / denom).clamp(-0.8, 0.8);
+        }
+        final double subR = selectedR + deltaR;
+        subPixelPts.add(
+          math.Point<double>(px + subR * nx, py + subR * ny),
+        );
       }
 
       if (subPixelPts.length < 5) {

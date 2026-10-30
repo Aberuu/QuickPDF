@@ -330,5 +330,56 @@ void main() {
       expect(p.g, closeTo(175, 6));
       expect(p.b, closeTo(165, 6));
     });
+
+    test('B&W Mode Dua Tahap Sauvola 1D sliding-window menghasilkan dokumen biner bersih', () async {
+      const int w = 200;
+      const int h = 250;
+      final canvas = img.Image(width: w, height: h);
+
+      // Latar kertas berbayang dari 225 di kiri-atas hingga 165 di kanan-bawah
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          final shade = (225.0 - (x / w * 30.0 + y / h * 30.0)).round();
+          canvas.setPixelRgb(x, y, shade, shade, shade);
+        }
+      }
+
+      // Tulisan tinta hitam di tengah
+      for (int y = 100; y < 150; y++) {
+        for (int x = 80; x < 120; x++) {
+          canvas.setPixelRgb(x, y, 20, 20, 20);
+        }
+      }
+
+      final rawBytes = Uint8List.fromList(img.encodeJpg(canvas, quality: 90));
+      final page = ScannedPageItem(
+        id: 'test_sauvola_1d',
+        sourceLabel: 'Uji Sauvola 1D',
+        originalBytes: rawBytes,
+        displayBytes: rawBytes,
+        corners: DocumentCorners.fullFrame,
+        filter: DocumentFilterType.blackAndWhite,
+      );
+
+      final processed = await SmartScannerService.processPage(
+        page,
+        filter: DocumentFilterType.blackAndWhite,
+      );
+
+      final outImg = img.decodeImage(processed.displayBytes);
+      expect(outImg, isNotNull);
+
+      // 1. Latar kertas berbayang di sudut kanan-bawah menjadi putih murni (255)
+      final bg = outImg!.getPixel(180, 220);
+      expect(bg.r, equals(255));
+      expect(bg.g, equals(255));
+      expect(bg.b, equals(255));
+
+      // 2. Tulisan tinta hitam menjadi hitam murni (0)
+      final text = outImg.getPixel(100, 125);
+      expect(text.r, equals(0));
+      expect(text.g, equals(0));
+      expect(text.b, equals(0));
+    });
   });
 }
