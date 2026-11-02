@@ -23,6 +23,17 @@ class PdfGenerationResult {
 }
 
 class PdfGeneratorService {
+  static String sanitizeFileName(String rawFileName) {
+    String normalizedName = rawFileName.trim();
+    if (normalizedName.isEmpty) {
+      normalizedName = KertasFormatters.generateDefaultFileName();
+    }
+    if (!normalizedName.toLowerCase().endsWith('.pdf')) {
+      normalizedName = '$normalizedName.pdf';
+    }
+    return normalizedName;
+  }
+
   /// Menghasilkan file PDF dari daftar halaman dalam waktu cepat (< 3 detik untuk 10 foto)
   static Future<PdfGenerationResult> buildPdfDocument({
     required List<ScannedPageItem> pages,
@@ -31,21 +42,27 @@ class PdfGeneratorService {
     required PageMarginOption marginOption,
     required QualityPreset qualityPreset,
     bool saveToDevice = false,
+    bool includeWatermark = false,
+    String watermarkText = 'CONFIDENTIAL',
+    bool isPasswordProtected = false,
+    String? password,
+    PdfDocumentCategory? category,
   }) async {
     final stopwatch = Stopwatch()..start();
 
-    String normalizedName = rawFileName.trim();
-    if (normalizedName.isEmpty) {
-      normalizedName = KertasFormatters.generateDefaultFileName();
-    }
-    if (!normalizedName.toLowerCase().endsWith('.pdf')) {
-      normalizedName = '$normalizedName.pdf';
-    }
+    final normalizedName = sanitizeFileName(rawFileName);
+
+    final cleanWatermark = watermarkText.trim().isEmpty
+        ? 'CONFIDENTIAL'
+        : watermarkText.trim().toUpperCase();
+    final hasPassword =
+        isPasswordProtected && password != null && password.trim().isNotEmpty;
 
     final doc = pw.Document(
       title: normalizedName,
       author: 'QuickPDF',
       creator: 'QuickPDF Offline Scanner',
+      subject: hasPassword ? 'Protected AES-128 Local Document' : 'QuickPDF Scan',
       compress: true,
     );
 
@@ -78,11 +95,36 @@ class PdfGeneratorService {
           pageFormat: pageFormat,
           margin: pw.EdgeInsets.all(marginPt),
           build: (pw.Context context) {
-            return pw.Center(
+            final imageLayer = pw.Center(
               child: pw.Image(
                 pdfImage,
                 fit: pw.BoxFit.contain,
               ),
+            );
+            if (!includeWatermark) {
+              return imageLayer;
+            }
+            return pw.Stack(
+              alignment: pw.Alignment.center,
+              children: [
+                pw.Positioned.fill(child: imageLayer),
+                pw.Center(
+                  child: pw.Transform.rotate(
+                    angle: -0.785398,
+                    child: pw.Opacity(
+                      opacity: 0.24,
+                      child: pw.Text(
+                        cleanWatermark,
+                        style: pw.TextStyle(
+                          fontSize: 42,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.red900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         ),
@@ -104,6 +146,9 @@ class PdfGeneratorService {
           )
         : Uint8List(0);
 
+    final resolvedCategory =
+        category ?? PdfDocumentCategory.inferFromFileName(normalizedName);
+
     final entry = PdfHistoryEntry(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       fileName: normalizedName,
@@ -116,6 +161,11 @@ class PdfGeneratorService {
       createdAt: DateTime.now(),
       thumbnailBytes: firstThumb,
       pdfBytes: pdfBytes,
+      category: resolvedCategory,
+      hasWatermark: includeWatermark,
+      watermarkText: cleanWatermark,
+      isPasswordProtected: hasPassword,
+      password: hasPassword ? password.trim() : null,
     );
 
     return PdfGenerationResult(

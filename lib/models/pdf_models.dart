@@ -41,28 +41,31 @@ enum PageMarginOption {
   }
 }
 
-/// Opsi kompresi kualitas dan ukuran file PDF (Fase 3)
+/// Opsi kompresi kualitas dan ukuran file PDF (Fase 3 & PRD Layar 3)
 enum QualityPreset {
   low(
     'low',
-    'Rendah (Hemat Kuota)',
-    'Ukuran sangat kecil untuk portal kampus / form web',
+    'Ukuran Minimal',
+    '72 DPI • Ringan untuk WhatsApp & Portal Kampus',
     1050,
     55,
+    72,
   ),
   medium(
     'medium',
-    'Sedang (Seimbang)',
-    'Tajam dibaca di HP & laptop dengan ukuran file efisien',
+    'Standar Rekomendasi',
+    '150 DPI • Seimbang untuk Arsip & Email',
     1650,
     78,
+    150,
   ),
   high(
     'high',
-    'Tinggi (Kualitas Cetak)',
-    'Resolusi penuh untuk dicetak atau arsip resmi',
+    'Kualitas Tinggi / Cetak',
+    '300 DPI • Ketajaman Teks Ultra Presisi',
     2400,
     92,
+    300,
   );
 
   final String code;
@@ -70,6 +73,7 @@ enum QualityPreset {
   final String description;
   final int maxDimensionPx;
   final int jpegQuality;
+  final int dpi;
 
   const QualityPreset(
     this.code,
@@ -77,13 +81,92 @@ enum QualityPreset {
     this.description,
     this.maxDimensionPx,
     this.jpegQuality,
+    this.dpi,
   );
+
+  String get historyQualityLabel {
+    switch (this) {
+      case QualityPreset.low:
+        return 'Mode Dokumen Ringan';
+      case QualityPreset.medium:
+        return 'Kompresi Optimal';
+      case QualityPreset.high:
+        return 'Resolusi Tinggi';
+    }
+  }
 
   static QualityPreset fromCode(String? code) {
     return QualityPreset.values.firstWhere(
       (e) => e.code == code,
       orElse: () => QualityPreset.medium,
     );
+  }
+}
+
+/// Kategori Dokumen pada Layar Riwayat PDF (PRD Layar 4)
+enum PdfDocumentCategory {
+  all('all', 'Semua'),
+  ujian('ujian', 'Tugas / Ujian'),
+  kantor('kantor', 'Kantor'),
+  keuangan('keuangan', 'Tagihan & Keuangan');
+
+  final String code;
+  final String label;
+  const PdfDocumentCategory(this.code, this.label);
+
+  String get shortBadgeLabel {
+    switch (this) {
+      case PdfDocumentCategory.all:
+        return 'Dokumen';
+      case PdfDocumentCategory.ujian:
+        return 'Ujian';
+      case PdfDocumentCategory.kantor:
+        return 'Kantor';
+      case PdfDocumentCategory.keuangan:
+        return 'Keuangan';
+    }
+  }
+
+  static PdfDocumentCategory fromCode(String? code, {String fileName = ''}) {
+    if (code != null && code.isNotEmpty && code != 'all') {
+      for (final c in PdfDocumentCategory.values) {
+        if (c.code == code) return c;
+      }
+    }
+    return inferFromFileName(fileName);
+  }
+
+  static PdfDocumentCategory inferFromFileName(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.contains('ujian') ||
+        lower.contains('tugas') ||
+        lower.contains('kalkulus') ||
+        lower.contains('kuliah') ||
+        lower.contains('jawaban') ||
+        lower.contains('soal') ||
+        lower.contains('fisika')) {
+      return PdfDocumentCategory.ujian;
+    }
+    if (lower.contains('kuitansi') ||
+        lower.contains('kwitansi') ||
+        lower.contains('struk') ||
+        lower.contains('bayar') ||
+        lower.contains('tagihan') ||
+        lower.contains('sewa') ||
+        lower.contains('invoice') ||
+        lower.contains('keuangan')) {
+      return PdfDocumentCategory.keuangan;
+    }
+    if (lower.contains('kontrak') ||
+        lower.contains('kantor') ||
+        lower.contains('ktp') ||
+        lower.contains('kk') ||
+        lower.contains('surat') ||
+        lower.contains('kerja') ||
+        lower.contains('formulir')) {
+      return PdfDocumentCategory.kantor;
+    }
+    return PdfDocumentCategory.ujian;
   }
 }
 
@@ -98,6 +181,19 @@ enum DocumentFilterType {
   final String label;
   final String description;
   const DocumentFilterType(this.code, this.label, this.description);
+
+  String get workspacePresetLabel {
+    switch (this) {
+      case DocumentFilterType.magicColor:
+        return 'Magic Color';
+      case DocumentFilterType.blackAndWhite:
+        return 'Dokumen B&W';
+      case DocumentFilterType.original:
+        return 'Warna Asli';
+      case DocumentFilterType.grayscaleSharpen:
+        return 'Grayscale';
+    }
+  }
 }
 
 /// Titik 4 sudut ter-normalisasi (0.0 .. 1.0) untuk potong tepi & luruskan perspektif (Fase 4)
@@ -139,7 +235,7 @@ class DocumentCorners {
   }
 }
 
-/// Representasi satu halaman foto di dalam Workspace (Fase 1, 2, 4)
+/// Representasi satu halaman foto di dalam Workspace (Fase 1, 2, 4 & PRD Layar 1)
 class ScannedPageItem {
   final String id;
   final String sourceLabel;
@@ -173,6 +269,35 @@ class ScannedPageItem {
       brightnessDelta != 0.0 ||
       contrastFactor != 1.0;
 
+  /// Label tipe deteksi pada kartu Meja Kerja sesuai PRD Layar 1 (A4 Auto, ID Card, Kwitansi)
+  String detectedFormatLabel(int index) {
+    final lower = sourceLabel.toLowerCase();
+    if (lower.contains('ktp') || lower.contains('id')) return 'ID Card';
+    if (lower.contains('struk') || lower.contains('kuitansi') || lower.contains('kwitansi')) {
+      return 'Kwitansi';
+    }
+    final ratio = height > 0 ? width / height : 0.7;
+    if (ratio > 1.25) return 'ID Card';
+    if (ratio < 0.55) return 'Kwitansi';
+    const presets = ['A4 Auto', 'ID Card', 'Kwitansi'];
+    if (lower.contains('contoh') || lower.contains('ujian')) {
+      return presets[index % presets.length];
+    }
+    return 'A4 Auto';
+  }
+
+  /// Badge kualitas pada kartu Meja Kerja sesuai PRD Layar 1 (Tajam, Tegak, Auto-Crop)
+  String qualityBadgeLabel(int index) {
+    if (!corners.isFullFrame) return 'Auto-Crop';
+    if (rotationQuarterTurns != 0) return 'Tegak';
+    if (filter == DocumentFilterType.blackAndWhite ||
+        filter == DocumentFilterType.magicColor) {
+      return 'Tajam';
+    }
+    const badges = ['Tajam', 'Tegak', 'Auto-Crop'];
+    return badges[index % badges.length];
+  }
+
   ScannedPageItem copyWith({
     String? sourceLabel,
     Uint8List? originalBytes,
@@ -201,7 +326,7 @@ class ScannedPageItem {
   }
 }
 
-/// Entri Riwayat Dokumen PDF (Fase 3)
+/// Entri Riwayat Dokumen PDF (Fase 3 & PRD Layar 4)
 class PdfHistoryEntry {
   final String id;
   final String fileName;
@@ -214,6 +339,11 @@ class PdfHistoryEntry {
   final DateTime createdAt;
   final Uint8List thumbnailBytes;
   final Uint8List? pdfBytes;
+  final PdfDocumentCategory category;
+  final bool hasWatermark;
+  final String watermarkText;
+  final bool isPasswordProtected;
+  final String? password;
 
   const PdfHistoryEntry({
     required this.id,
@@ -227,7 +357,49 @@ class PdfHistoryEntry {
     required this.createdAt,
     required this.thumbnailBytes,
     this.pdfBytes,
+    this.category = PdfDocumentCategory.ujian,
+    this.hasWatermark = false,
+    this.watermarkText = 'CONFIDENTIAL',
+    this.isPasswordProtected = false,
+    this.password,
   });
+
+  PdfHistoryEntry copyWith({
+    String? fileName,
+    String? filePath,
+    int? fileSizeBytes,
+    int? pageCount,
+    PaperSizeOption? paperSize,
+    PageMarginOption? margin,
+    QualityPreset? quality,
+    DateTime? createdAt,
+    Uint8List? thumbnailBytes,
+    Uint8List? pdfBytes,
+    PdfDocumentCategory? category,
+    bool? hasWatermark,
+    String? watermarkText,
+    bool? isPasswordProtected,
+    String? password,
+  }) {
+    return PdfHistoryEntry(
+      id: id,
+      fileName: fileName ?? this.fileName,
+      filePath: filePath ?? this.filePath,
+      fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
+      pageCount: pageCount ?? this.pageCount,
+      paperSize: paperSize ?? this.paperSize,
+      margin: margin ?? this.margin,
+      quality: quality ?? this.quality,
+      createdAt: createdAt ?? this.createdAt,
+      thumbnailBytes: thumbnailBytes ?? this.thumbnailBytes,
+      pdfBytes: pdfBytes ?? this.pdfBytes,
+      category: category ?? this.category,
+      hasWatermark: hasWatermark ?? this.hasWatermark,
+      watermarkText: watermarkText ?? this.watermarkText,
+      isPasswordProtected: isPasswordProtected ?? this.isPasswordProtected,
+      password: password ?? this.password,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -241,19 +413,24 @@ class PdfHistoryEntry {
       'quality': quality.code,
       'createdAt': createdAt.toIso8601String(),
       'thumbnailBase64': base64Encode(thumbnailBytes),
-      // Simpan byte PDF jika ukuran <= 4 MB agar bisa langsung dibuka ulang di semua platform
       'pdfBytesBase64': (pdfBytes != null && pdfBytes!.lengthInBytes <= 4 * 1024 * 1024)
           ? base64Encode(pdfBytes!)
           : null,
+      'category': category.code,
+      'hasWatermark': hasWatermark,
+      'watermarkText': watermarkText,
+      'isPasswordProtected': isPasswordProtected,
+      'password': password,
     };
   }
 
   factory PdfHistoryEntry.fromJson(Map<String, dynamic> json) {
     final thumbStr = json['thumbnailBase64'] as String? ?? '';
     final pdfStr = json['pdfBytesBase64'] as String?;
+    final fName = json['fileName'] as String? ?? 'Dokumen.pdf';
     return PdfHistoryEntry(
       id: json['id'] as String,
-      fileName: json['fileName'] as String,
+      fileName: fName,
       filePath: json['filePath'] as String?,
       fileSizeBytes: json['fileSizeBytes'] as int? ?? 0,
       pageCount: json['pageCount'] as int? ?? 1,
@@ -263,6 +440,14 @@ class PdfHistoryEntry {
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
       thumbnailBytes: thumbStr.isNotEmpty ? base64Decode(thumbStr) : Uint8List(0),
       pdfBytes: (pdfStr != null && pdfStr.isNotEmpty) ? base64Decode(pdfStr) : null,
+      category: PdfDocumentCategory.fromCode(
+        json['category'] as String?,
+        fileName: fName,
+      ),
+      hasWatermark: json['hasWatermark'] as bool? ?? false,
+      watermarkText: json['watermarkText'] as String? ?? 'CONFIDENTIAL',
+      isPasswordProtected: json['isPasswordProtected'] as bool? ?? false,
+      password: json['password'] as String?,
     );
   }
 }
@@ -278,6 +463,15 @@ class KertasFormatters {
     final hh = dt.hour.toString().padLeft(2, '0');
     final mm = dt.minute.toString().padLeft(2, '0');
     return 'PDF_$y$m${d}_$hh$mm.pdf';
+  }
+
+  /// Menghasilkan nama file Scan_Dokumen_YYYYMMDD.pdf sesuai PRD Layar 3
+  static String generateScanDocumentFileName([DateTime? now]) {
+    final dt = now ?? DateTime.now();
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    return 'Scan_Dokumen_$y$m$d.pdf';
   }
 
   static String formatBytes(int bytes) {
@@ -304,3 +498,4 @@ class KertasFormatters {
     return '$d $m $y, $hh:$mm';
   }
 }
+

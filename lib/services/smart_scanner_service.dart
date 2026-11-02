@@ -224,6 +224,11 @@ class SmartScannerService {
     required PageMarginOption marginOption,
     required QualityPreset qualityPreset,
     bool saveToDevice = false,
+    bool includeWatermark = false,
+    String watermarkText = 'CONFIDENTIAL',
+    bool isPasswordProtected = false,
+    String? password,
+    PdfDocumentCategory? category,
   }) {
     return PdfGeneratorService.buildPdfDocument(
       pages: pages,
@@ -232,6 +237,11 @@ class SmartScannerService {
       marginOption: marginOption,
       qualityPreset: qualityPreset,
       saveToDevice: saveToDevice,
+      includeWatermark: includeWatermark,
+      watermarkText: watermarkText,
+      isPasswordProtected: isPasswordProtected,
+      password: password,
+      category: category,
     );
   }
 

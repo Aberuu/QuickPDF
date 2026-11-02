@@ -354,4 +354,171 @@ void main() {
     expect(result.pdfBytes.isNotEmpty, isTrue);
     expect(result.historyEntry.thumbnailBytes.isNotEmpty, isTrue);
   });
+
+  testWidgets(
+      'Verifikasi PRD v1.0 UI/UX: Layar 1 (Preset Filter & Urutkan), Layar 2 (Gyro & Pre-filters), Layar 3 (Carousel A4, Watermark & Sandi), Layar 4 (Kategori, Menu 3-Titik & Verifikasi Sandi)',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const QuickPdfApp());
+    await tester.pumpAndSettle();
+
+    // 1. Verifikasi Layar 4 (Riwayat): Banner Penyimpanan Offline, Filter Kategori, & Kartu Privasi
+    expect(find.text('Penyimpanan Offline'), findsOneWidget);
+    expect(find.text('Aman'), findsOneWidget);
+    expect(find.text('Semua'), findsOneWidget);
+    expect(find.text('Tugas / Ujian'), findsOneWidget);
+    expect(find.text('Kantor'), findsOneWidget);
+    expect(find.text('Tagihan & Keuangan'), findsOneWidget);
+    expect(find.text('Privasi Berkas Mutlak'), findsOneWidget);
+
+    // 2. Verifikasi Layar 2 (Smart Camera Scanner): Gyro Leveler, Hal ke-1, Grid Toggle, & Quick Pre-filters
+    await tester.tap(find.text('Auto-Scan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hal ke-1'), findsOneWidget);
+    expect(find.textContaining('Sensor Kemiringan:'), findsOneWidget);
+    expect(find.text('A4 Otomatis'), findsOneWidget);
+    expect(find.text('Pembersih Bayangan'), findsOneWidget);
+    expect(find.text('Teks Tajam (B/W)'), findsOneWidget);
+
+    // Toggle Kisi Petunjuk Grid & Quick Pre-filter Teks Tajam (B/W)
+    await tester.tap(find.byTooltip('Kisi Petunjuk Grid'));
+    await tester.pumpAndSettle();
+    final bwPrefilter = find.text('Teks Tajam (B/W)');
+    await tester.ensureVisible(bwPrefilter);
+    await tester.pumpAndSettle();
+    await tester.tap(bwPrefilter);
+    await tester.pumpAndSettle();
+
+    // Tutup scanner kembali ke beranda
+    await tester.tap(find.byTooltip('Tutup Pemindai QuickPDF'));
+    await tester.pumpAndSettle();
+
+    // 3. Verifikasi Layar 1 (Meja Kerja): Muat 3 lembar contoh, Preset Filter Global, & Urutkan
+    await tester.tap(find.text('Meja Kerja (0)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Muat 3 Lembar Contoh Ujian'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Meja Kerja Aktif'), findsOneWidget);
+    expect(find.text('3 Hal Siap'), findsOneWidget);
+    expect(find.text('Magic Color'), findsOneWidget);
+    expect(find.text('Dokumen B&W'), findsOneWidget);
+    expect(find.text('Warna Asli'), findsOneWidget);
+
+    // Klik Urutkan untuk membalik urutan halaman
+    final urutkanBtn = find.text('Urutkan');
+    await tester.ensureVisible(urutkanBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(urutkanBtn);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Urutan halaman di Meja Kerja berhasil dibalik.'),
+      findsOneWidget,
+    );
+
+    // 4. Verifikasi Layar 3 (Detail & Ekspor PDF): Carousel A4, DPI 3-Tier, Watermark, & Proteksi Sandi
+    await tester.tap(find.text('Buat PDF (3)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pratinjau Dokumen'), findsOneWidget);
+    expect(find.text('Hal 1 dari 3'), findsOneWidget);
+    expect(find.text('Optimal'), findsOneWidget);
+
+    // Navigasi Carousel A4 ke halaman berikutnya
+    await tester.tap(find.byTooltip('Halaman Berikutnya'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hal 2 dari 3'), findsOneWidget);
+
+    // Aktifkan Watermark & Kata Sandi
+    final watermarkSwitch = find.text('Sertakan Watermark / Tanda Air');
+    await tester.ensureVisible(watermarkSwitch);
+    await tester.pumpAndSettle();
+    await tester.tap(watermarkSwitch);
+    await tester.pumpAndSettle();
+    expect(
+      find.widgetWithText(
+        TextField,
+        'Teks Watermark (misal: CONFIDENTIAL / SALINAN)',
+      ),
+      findsOneWidget,
+    );
+
+    final passwordSwitch = find.text('Proteksi Kata Sandi');
+    await tester.ensureVisible(passwordSwitch);
+    await tester.pumpAndSettle();
+    await tester.tap(passwordSwitch);
+    await tester.pumpAndSettle();
+
+    final passwordField = find.widgetWithText(
+      TextField,
+      'Masukkan sandi PDF',
+    );
+    await tester.ensureVisible(passwordField);
+    await tester.pumpAndSettle();
+    await tester.enterText(passwordField, 'kampus123');
+    await tester.pumpAndSettle();
+
+    // Simpan PDF
+    await tester.tap(find.text('Simpan PDF'));
+    await tester.pumpAndSettle();
+
+    // 5. Verifikasi Layar 4 (Riwayat): Dokumen memiliki badge Watermark, Menu 3-Titik (Ganti Nama), & Verifikasi Sandi
+    await tester.tap(find.text('Riwayat PDF (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Watermark'), findsOneWidget);
+    expect(find.text('OCR Siap'), findsOneWidget);
+
+    // Buka Menu 3-Titik (Kelola Berkas PDF Lokal) -> Ganti Nama Berkas
+    await tester.tap(find.byTooltip('Menu Dokumen').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Kelola Berkas PDF Lokal'), findsOneWidget);
+    await tester.tap(find.text('Ganti Nama Berkas'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ganti Nama & Kategori Berkas'), findsOneWidget);
+
+    final renameField = find.widgetWithText(TextField, 'Nama File PDF');
+    await tester.enterText(renameField, 'Kuitansi_Kos_Mei');
+    await tester.tap(find.text('Keuangan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Simpan Nama'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kuitansi_Kos_Mei.pdf'), findsOneWidget);
+
+    // Filter berdasarkan kategori 'Tagihan & Keuangan' -> berkas tetap tampil; 'Kantor' -> kosong
+    final kantorChip = find.text('Kantor');
+    await tester.ensureVisible(kantorChip);
+    await tester.pumpAndSettle();
+    await tester.tap(kantorChip);
+    await tester.pumpAndSettle();
+    expect(find.text('Kuitansi_Kos_Mei.pdf'), findsNothing);
+
+    final keuanganChip = find.text('Tagihan & Keuangan');
+    await tester.ensureVisible(keuanganChip);
+    await tester.pumpAndSettle();
+    await tester.tap(keuanganChip);
+    await tester.pumpAndSettle();
+    expect(find.text('Kuitansi_Kos_Mei.pdf'), findsOneWidget);
+
+    // Uji dialog verifikasi kata sandi saat membuka dokumen terkunci
+    await tester.tap(find.byTooltip('Buka & Baca PDF').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Dokumen Terkunci Sandi'), findsOneWidget);
+
+    // Masukkan sandi salah terlebih dahulu
+    final verifyField = find.widgetWithText(TextField, 'Kata sandi dokumen...');
+    await tester.enterText(verifyField, 'salah');
+    await tester.tap(find.text('Buka Dokumen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Kata sandi tidak sesuai.'), findsOneWidget);
+
+    // Tutup dialog sandi
+    await tester.tap(find.text('Batal'));
+    await tester.pumpAndSettle();
+  });
 }
+

@@ -12,19 +12,26 @@ class KertasColors {
   static const Color lightInk = Color(0xFF141413);
   static const Color lightGraphite = Color(0xFF52504C);
 
-  // Mode Gelap (Meja Kerja Malam)
+  // Mode Gelap (Meja Kerja Malam & QuickPDF Dark Mode Utility)
   static const Color darkSlateBg = Color(0xFF121316);
-  static const Color darkSurface = Color(0xFF1C1E24);
-  static const Color darkSurfaceAlt = Color(0xFF252830);
-  static const Color darkBorder = Color(0xFF2E323B);
-  static const Color darkPaperText = Color(0xFFF3F1EC);
-  static const Color darkAshText = Color(0xFFA6A49E);
+  static const Color darkSurfaceLowest = Color(0xFF0D0E11);
+  static const Color darkSurfaceLow = Color(0xFF1B1B1F);
+  static const Color darkSurface = Color(0xFF1E2129);
+  static const Color darkSurfaceAlt = Color(0xFF252833);
+  static const Color darkBorder = Color(0xFF2D323E);
+  static const Color darkPaperText = Color(0xFFF3F4F6);
+  static const Color darkAshText = Color(0xFF9CA3AF);
 
-  // Aksen Utama & Status Fungsional
+  // Aksen Utama (QuickPDF Utility System Coral Red & Vermilion) & Status Fungsional
+  static const Color coralRed = Color(0xFFEF4444);
+  static const Color coralRedDark = Color(0xFFDC2626);
   static const Color vermilion = Color(0xFFD9381E);
-  static const Color vermilionStamp = vermilion;
-  static const Color vermilionDark = Color(0xFFEA4B30);
+  static const Color vermilionStamp = Color(0xFFEF4444);
+  static const Color vermilionDark = Color(0xFFEF4444);
   static const Color successGreen = Color(0xFF1B7A43);
+  static const Color emeraldNeon = Color(0xFF4EDEA3);
+  static const Color emeraldDark = Color(0xFF00855B);
+  static const Color tealAccent = Color(0xFF69D8D4);
   static const Color warningAmber = Color(0xFFB45309);
   static const Color dangerRed = Color(0xFFB91C1C);
 }

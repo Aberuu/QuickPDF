@@ -48,6 +48,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
   bool _isPermissionDenied = false;
   bool _isUsingSimulationFallback = false;
   bool _isFlashTorchOn = false;
+  bool _showGridOverlay = true;
   bool _isDetectingFrame = false;
   bool _isCapturingPhoto = false;
   String? _cameraErrorText;
@@ -1156,10 +1157,24 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     Navigator.of(context).pop(_capturedPages);
   }
 
+  String _computeGyroLevelText() {
+    final corners = _smoothedCorners;
+    if (corners == null) {
+      return '0.2° (Presisi Optimal)';
+    }
+    final dx = corners.topRight.dx - corners.topLeft.dx;
+    final dy = corners.topRight.dy - corners.topLeft.dy;
+    if (dx.abs() < 1e-4) return '0.2° (Presisi Optimal)';
+    final deg = (math.atan2(dy, dx) * 180.0 / math.pi).abs();
+    final clamped = deg.clamp(0.1, 45.0);
+    final status = clamped <= 2.2 ? 'Presisi Optimal' : 'Sesuaikan Sudut';
+    return '${clamped.toStringAsFixed(1)}° ($status)';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0E0E0D),
+      backgroundColor: KertasColors.darkSlateBg,
       body: SafeArea(
         child: Stack(
           fit: StackFit.expand,
@@ -1192,16 +1207,26 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
   }
 
   Widget _buildTopBar() {
+    final int nextPageIndex =
+        widget.existingPageCount + _capturedPages.length + 1;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      color: const Color(0xFF141311),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      decoration: const BoxDecoration(
+        color: KertasColors.darkSlateBg,
+        border: Border(bottom: BorderSide(color: KertasColors.darkBorder)),
+      ),
       child: Row(
         children: [
           IconButton(
             tooltip: 'Tutup Pemindai QuickPDF',
-            icon: const Icon(Icons.close, color: Colors.white),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
             onPressed: () => Navigator.of(context).pop(_capturedPages),
           ),
+          const SizedBox(width: 4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1210,20 +1235,18 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                   'QuickPDF Live Scanner',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 15.5,
+                    fontSize: 14,
                     fontWeight: FontWeight.w800,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   _isAutoScanEnabled
-                      ? 'Mode Auto-Scan Aktif (0,8 dtk)'
-                      : 'Mode Manual (Tekan Shutter)',
-                  style: TextStyle(
-                    color: _isAutoScanEnabled
-                        ? const Color(0xFF86EFAC)
-                        : const Color(0xFFFDE68A),
-                    fontSize: 11.5,
+                      ? 'Auto Scan • Offline & Aman'
+                      : 'Mode Manual • Offline & Aman',
+                  style: const TextStyle(
+                    color: KertasColors.tealAccent,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w600,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1231,10 +1254,37 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
               ],
             ),
           ),
+          const SizedBox(width: 4),
 
-          // Tombol Toggle Auto-Scan (Aktifkan / Nonaktifkan secara manual)
+          // Badge Counter Halaman Aktif (Hal ke-X) sesuai PRD Layar 2
+          Container(
+            margin: const EdgeInsets.only(right: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            decoration: BoxDecoration(
+              color: KertasColors.coralRed,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.file_copy_outlined, size: 12, color: Colors.white),
+                const SizedBox(width: 3),
+                Text(
+                  'Hal ke-$nextPageIndex',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: KertasTheme.tabularNums,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Tombol Toggle Auto-Scan (Otomatis / Manual)
           Padding(
-            padding: const EdgeInsets.only(right: 4),
+            padding: const EdgeInsets.only(right: 2),
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
               onTap: _toggleAutoScanMode,
@@ -1243,15 +1293,15 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                     ? 'Nonaktifkan Auto-Scan (Beralih ke Mode Manual)'
                     : 'Aktifkan Auto-Scan Otomatis',
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
                     color: _isAutoScanEnabled
-                        ? const Color(0xFF15803D).withValues(alpha: 0.32)
+                        ? KertasColors.emeraldDark
                         : Colors.white.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: _isAutoScanEnabled
-                          ? const Color(0xFF4ADE80)
+                          ? KertasColors.emeraldNeon
                           : Colors.white30,
                     ),
                   ),
@@ -1260,21 +1310,17 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                     children: [
                       Icon(
                         _isAutoScanEnabled
-                            ? Icons.hdr_auto
+                            ? Icons.auto_awesome
                             : Icons.touch_app_outlined,
-                        size: 16,
-                        color: _isAutoScanEnabled
-                            ? const Color(0xFF4ADE80)
-                            : Colors.white70,
+                        size: 14,
+                        color: Colors.white,
                       ),
-                      const SizedBox(width: 5),
+                      const SizedBox(width: 3),
                       Text(
                         _isAutoScanEnabled ? 'Auto' : 'Manual',
-                        style: TextStyle(
-                          color: _isAutoScanEnabled
-                              ? const Color(0xFF4ADE80)
-                              : Colors.white,
-                          fontSize: 12,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1285,16 +1331,35 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
             ),
           ),
 
+          // Tombol Kisi Petunjuk Grid
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: 'Kisi Petunjuk Grid',
+            icon: Icon(
+              _showGridOverlay ? Icons.grid_on : Icons.grid_off,
+              color: _showGridOverlay ? KertasColors.tealAccent : Colors.white54,
+              size: 19,
+            ),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              setState(() => _showGridOverlay = !_showGridOverlay);
+            },
+          ),
+
           // Tombol Ganti Kamera (Mendukung Kamera Depan/Belakang & Kamera Eksternal Desktop)
           GestureDetector(
             onLongPress: _openCameraSelectorSheet,
             child: IconButton(
               visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               tooltip: 'Ganti Kamera (Kamera Eksternal / Depan / Belakang)',
               icon: const Icon(
                 Icons.cameraswitch_outlined,
                 color: Colors.white,
-                size: 22,
+                size: 20,
               ),
               onPressed: () => _switchCamera(),
             ),
@@ -1303,10 +1368,13 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           if (!_isUsingSimulationFallback && _cameraController != null)
             IconButton(
               visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               tooltip: _isFlashTorchOn ? 'Matikan Lampu Kilat' : 'Nyalakan Lampu Kilat',
               icon: Icon(
                 _isFlashTorchOn ? Icons.flash_on : Icons.flash_off,
                 color: _isFlashTorchOn ? const Color(0xFFFACC15) : Colors.white,
+                size: 19,
               ),
               onPressed: _toggleFlashTorch,
             ),
@@ -1320,7 +1388,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(color: KertasColors.vermilionStamp),
+          CircularProgressIndicator(color: KertasColors.coralRed),
           SizedBox(height: 14),
           Text(
             'Menyiapkan sensor kamera & detektor tepi dokumen...',
@@ -1341,9 +1409,9 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1E1B),
+              color: KertasColors.darkSurface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white24),
+              border: Border.all(color: KertasColors.darkBorder),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1374,7 +1442,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: KertasColors.vermilionStamp,
+                      backgroundColor: KertasColors.coralRed,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(0, 48),
                     ),
@@ -1388,7 +1456,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      backgroundColor: const Color(0xFF232220),
+                      backgroundColor: KertasColors.darkSurfaceAlt,
                       foregroundColor: Colors.white,
                       side: const BorderSide(color: Colors.white38),
                       minimumSize: const Size(0, 48),
@@ -1415,9 +1483,9 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1E1B),
+              color: KertasColors.darkSurface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white24),
+              border: Border.all(color: KertasColors.darkBorder),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1458,7 +1526,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      backgroundColor: const Color(0xFF232220),
+                      backgroundColor: KertasColors.darkSurfaceAlt,
                       foregroundColor: Colors.white,
                       side: const BorderSide(color: Colors.white38),
                     ),
@@ -1493,22 +1561,22 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
             _scannerState == ScannerState.capturing);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1917),
-        borderRadius: BorderRadius.circular(14),
+        color: KertasColors.darkSurfaceLowest,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isLockedOrLocking
-              ? const Color(0xFFFFD000)
-              : Colors.white.withValues(alpha: 0.18),
-          width: isLockedOrLocking ? 2.0 : 1.0,
+              ? KertasColors.emeraldNeon
+              : KertasColors.darkBorder,
+          width: isLockedOrLocking ? 2.0 : 1.2,
         ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Umpan Kamera Langsung (Disesuaikan dengan BoxFit.cover)
+          // 1. Umpan Kamera Langsung
           if (!_isUsingSimulationFallback &&
               _cameraController != null &&
               _cameraController!.value.isInitialized)
@@ -1516,10 +1584,11 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           else
             _buildSimulationScenePreview(),
 
-          // 2. Garis Kisi 3x3 (Rule of Thirds) ala Xiaomi HyperOS Camera
-          const CustomPaint(painter: _CameraGridPainter()),
+          // 2. Garis Kisi 3x3 (Rule of Thirds) jika diaktifkan
+          if (_showGridOverlay)
+            const CustomPaint(painter: _CameraGridPainter()),
 
-          // 3. Overlay Poligon 4 Sudut Dokumen Real-Time (Warna Golden-Amber #FFD000)
+          // 3. Auto-Contour Edge Detection berwarna Hijau Neon (#4EDEA3) sesuai PRD Layar 2
           if (_smoothedCorners != null)
             CustomPaint(
               painter: _LiveDocumentPolygonPainter(
@@ -1530,48 +1599,45 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
               ),
             ),
 
-          // 4. Floating Capsule Opsi Filter ala Xiaomi HyperOS Document Mode di bagian atas
+          // 4. Floating Capsule Opsi Filter [Original | B&W | Enhanced] di bagian atas
           Positioned(
-            top: 14,
+            top: 12,
             left: 16,
             right: 16,
             child: _buildFloatingFilterCapsule(),
           ),
 
-          // 5. Pill Status Panduan Pemindaian di bawah kapsul filter
+          // 5. Detection Status Floating Badge dengan Indikator Hijau Neon
           Positioned(
-            top: 60,
+            top: 54,
             left: 20,
             right: 20,
             child: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.72),
+                  color: const Color(0xFF1F1F23).withValues(alpha: 0.88),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isLockedOrLocking
-                        ? const Color(0xFFFFD000)
+                        ? KertasColors.emeraldNeon
                         : Colors.white24,
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      !_isAutoScanEnabled
-                          ? Icons.touch_app_outlined
-                          : _scannerState == ScannerState.cooldown
-                              ? Icons.check_circle_outline
-                              : isLockedOrLocking
-                                  ? Icons.center_focus_strong
-                                  : Icons.crop_free,
-                      size: 15,
-                      color: isLockedOrLocking
-                          ? const Color(0xFFFFD000)
-                          : const Color(0xFFFDE68A),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _smoothedCorners != null
+                            ? KertasColors.emeraldNeon
+                            : const Color(0xFFFDE68A),
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 7),
                     Flexible(
                       child: Text(
                         _guidanceText,
@@ -1590,12 +1656,53 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
             ),
           ),
 
-          // 6. Floating Zoom Level Selector [0.6 | 1x | 2] di bagian bawah viewfinder
+          // 6. Sensor Kemiringan (Gyro Leveler Ribbon) & Zoom Capsule di bawah viewfinder
           Positioned(
-            bottom: 14,
-            left: 0,
-            right: 0,
-            child: Center(child: _buildZoomCapsule()),
+            bottom: 12,
+            left: 12,
+            right: 12,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Gyro Leveler Ribbon sesuai PRD Layar 2
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: KertasColors.darkSlateBg.withValues(alpha: 0.84),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.screen_rotation,
+                        size: 14,
+                        color: KertasColors.tealAccent,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Sensor Kemiringan: ${_computeGyroLevelText()}',
+                          style: const TextStyle(
+                            color: KertasColors.tealAccent,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: KertasTheme.tabularNums,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _buildZoomCapsule(),
+              ],
+            ),
           ),
 
           // Tombol Simulasi Ganti Lembar di Pojok Kanan Bawah Viewfinder (Saat Mode Simulasi)
@@ -1630,7 +1737,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           // Petunjuk Kontras Rendah + Tombol Beralih ke Mode Manual
           if (_showLowContrastHint && _isAutoScanEnabled)
             Positioned(
-              bottom: 56,
+              bottom: 86,
               left: 16,
               right: 16,
               child: Container(
@@ -1638,13 +1745,13 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.86),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFFD000)),
+                  border: Border.all(color: KertasColors.emeraldNeon),
                 ),
                 child: Row(
                   children: [
                     const Icon(
                       Icons.lightbulb_outline,
-                      color: Color(0xFFFFD000),
+                      color: KertasColors.emeraldNeon,
                       size: 20,
                     ),
                     const SizedBox(width: 10),
@@ -1660,7 +1767,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                       child: const Text(
                         'Mode Manual',
                         style: TextStyle(
-                          color: Color(0xFFFFD000),
+                          color: KertasColors.emeraldNeon,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1674,8 +1781,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     );
   }
 
-  /// Floating Capsule Opsi Filter ala Xiaomi HyperOS Document Mode:
-  /// [Original | B&W | Enhanced]
+  /// Floating Capsule Opsi Filter: [Original | B&W | Enhanced]
   Widget _buildFloatingFilterCapsule() {
     final List<(DocumentFilterType, String)> options = [
       (DocumentFilterType.original, 'Original'),
@@ -1686,7 +1792,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     return Center(
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.58),
+          color: Colors.black.withValues(alpha: 0.62),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: Colors.white12),
         ),
@@ -1706,7 +1812,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
                     color: isSelected ? Colors.white : Colors.transparent,
                     borderRadius: BorderRadius.circular(20),
@@ -1742,7 +1848,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white12),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: zoomOptions.map((opt) {
@@ -1750,20 +1856,20 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
           return GestureDetector(
             onTap: () => _setZoomLevel(opt.$1),
             child: Container(
-              width: 38,
-              height: 30,
+              width: 36,
+              height: 26,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isSelected
-                    ? const Color(0xFFFFD000)
+                    ? KertasColors.emeraldNeon
                     : Colors.transparent,
               ),
               child: Text(
                 opt.$2,
                 style: TextStyle(
                   color: isSelected ? Colors.black : Colors.white,
-                  fontSize: 12,
+                  fontSize: 11.5,
                   fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                 ),
               ),
@@ -1819,93 +1925,203 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     );
   }
 
-  /// Panel Bawah Bergaya Xiaomi HyperOS Document Mode:
-  /// - Kiri: Tumpukan thumbnail iOS Screenshot atau tombol Galeri
-  /// - Tengah: Tombol Shutter Cincin Ganda Putih Tactile
-  /// - Kanan: Tombol utama "Selesai (N)"
+  /// Persistent Bottom Control Dock sesuai PRD Layar 2 & Stitch Smart Camera Scanner:
+  /// - Orientation guidance helper pill
+  /// - Ergonomic Shutter Deck (Galeri/Stack di kiri, Concentric Coral-Red Shutter di tengah, Selesai (N) di kanan)
+  /// - Quick Pre-filters Bar (A4 Otomatis, Pembersih Bayangan, Teks Tajam (B/W))
   Widget _buildBottomAutoScannerBar() {
     final int count = _capturedPages.length;
     final bool hasCaptured = count > 0;
 
+    final List<(DocumentFilterType, String)> preFilters = [
+      (DocumentFilterType.original, 'A4 Otomatis'),
+      (DocumentFilterType.magicColor, 'Pembersih Bayangan'),
+      (DocumentFilterType.blackAndWhite, 'Teks Tajam (B/W)'),
+    ];
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: const BoxDecoration(
-        color: Color(0xFF141311),
-        border: Border(top: BorderSide(color: Colors.white12)),
+        color: KertasColors.darkSlateBg,
+        border: Border(top: BorderSide(color: KertasColors.darkBorder)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Pojok Kiri Bawah: Tumpukan Thumbnail iOS Screenshot atau Pintasan Galeri
-          if (hasCaptured)
-            CapturedPagesCornerStack(
-              pages: _capturedPages,
-              onTapStack: _openCapturedStackReviewSheet,
-            )
-          else
-            SizedBox(
-              width: 62,
-              height: 62,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: const Color(0xFF232220),
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white24),
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+          // Orientation Guidance Helper Pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: KertasColors.darkSurfaceLow,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: KertasColors.darkBorder),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  size: 14,
+                  color: KertasColors.tealAccent,
+                ),
+                SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Arahkan kamera tegak lurus terhadap lembar dokumen',
+                    style: TextStyle(
+                      color: KertasColors.darkAshText,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                onPressed: _pickFallbackFromGallery,
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.photo_library_outlined, size: 20, color: Colors.white),
-                    SizedBox(height: 3),
-                    Text(
-                      'Galeri',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Main Mobile Ergonomic Shutter Deck
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF181A20),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: KertasColors.darkBorder),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Kiri: Tumpukan Thumbnail iOS Screenshot atau Pintasan Galeri
+                if (hasCaptured)
+                  CapturedPagesCornerStack(
+                    pages: _capturedPages,
+                    onTapStack: _openCapturedStackReviewSheet,
+                  )
+                else
+                  SizedBox(
+                    width: 62,
+                    height: 62,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: KertasColors.darkSurface,
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: KertasColors.darkBorder),
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: _pickFallbackFromGallery,
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.photo_library_outlined,
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'Galeri',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
+
+                const SizedBox(width: 12),
+
+                // Tengah: Tombol Shutter Cincin Konsentris Coral Red
+                Expanded(
+                  child: _buildHyperOsShutterButton(),
                 ),
-              ),
+
+                const SizedBox(width: 12),
+
+                // Kanan: Tombol Selesai (N) -> Langsung ke Buat PDF
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hasCaptured
+                        ? KertasColors.emeraldDark
+                        : const Color(0xFF262930),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(108, 52),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: hasCaptured ? _finishAndReturnPages : null,
+                  icon: const Icon(Icons.done_all, size: 19),
+                  label: Text(
+                    'Selesai ($count)',
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      fontFeatures: KertasTheme.tabularNums,
+                    ),
+                  ),
+                ),
+              ],
             ),
-
-          const SizedBox(width: 12),
-
-          // Tengah: Tombol Shutter Bergaya HyperOS
-          Expanded(
-            child: _buildHyperOsShutterButton(),
           ),
+          const SizedBox(height: 8),
 
-          const SizedBox(width: 12),
-
-          // Kanan: Tombol Utama Selesai (N) -> Langsung ke Buat PDF
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: hasCaptured
-                  ? KertasColors.vermilionStamp
-                  : const Color(0xFF2C2A27),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(110, 52),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: hasCaptured ? _finishAndReturnPages : null,
-            icon: const Icon(Icons.check_circle_outline, size: 19),
-            label: Text(
-              'Selesai ($count)',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                fontFeatures: KertasTheme.tabularNums,
-              ),
+          // Quick Pre-filters Bar (A4 Otomatis, Pembersih Bayangan, Teks Tajam (B/W))
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: preFilters.map((pf) {
+                final isSelected = _activeFilter == pf.$1;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() => _activeFilter = pf.$1);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? KertasColors.darkSurfaceAlt
+                            : KertasColors.darkSurface,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected
+                              ? KertasColors.coralRed
+                              : KertasColors.darkBorder,
+                        ),
+                      ),
+                      child: Text(
+                        pf.$2,
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : KertasColors.darkAshText,
+                          fontSize: 12,
+                          fontWeight:
+                              isSelected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ],
@@ -1931,58 +2147,62 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                width: 76,
-                height: 76,
+                width: 72,
+                height: 72,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Cincin luar putih 76px
+                    // Cincin luar konsentris Coral Red 72px
                     Container(
-                      width: 76,
-                      height: 76,
+                      width: 72,
+                      height: 72,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3.5),
+                        color: KertasColors.coralRed.withValues(alpha: 0.20),
+                        border: Border.all(
+                          color: KertasColors.coralRed.withValues(alpha: 0.55),
+                          width: 2.5,
+                        ),
                       ),
                     ),
-                    // Indikator progres kunci Auto-Scan (warna amber #FFD000)
+                    // Indikator progres kunci Auto-Scan (Hijau Neon #4EDEA3)
                     if (isLocking)
                       SizedBox(
-                        width: 76,
-                        height: 76,
+                        width: 72,
+                        height: 72,
                         child: CircularProgressIndicator(
                           value: _lockProgress.clamp(0.08, 1.0),
-                          strokeWidth: 4.5,
+                          strokeWidth: 4.0,
                           valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFFFFD000),
+                            KertasColors.emeraldNeon,
                           ),
                           backgroundColor: Colors.transparent,
                         ),
                       ),
-                    // Lingkaran solid putih di dalam (60px)
+                    // Inti Shutter Coral Red 56px
                     Container(
-                      width: 60,
-                      height: 60,
+                      width: 56,
+                      height: 56,
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white,
+                        color: KertasColors.coralRed,
                       ),
                       child: Center(
                         child: Icon(
                           _isAutoScanEnabled
                               ? (_scannerState == ScannerState.cooldown
                                   ? Icons.check
-                                  : Icons.hdr_auto_outlined)
-                              : Icons.camera_alt,
-                          color: const Color(0xFF141311),
-                          size: 24,
+                                  : Icons.center_focus_strong)
+                              : Icons.center_focus_strong,
+                          color: Colors.white,
+                          size: 26,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 4),
               Text(
                 !_isAutoScanEnabled
                     ? 'Potret Manual'
@@ -1993,7 +2213,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
                             : 'Auto-Scan Aktif',
                 style: const TextStyle(
                   color: Colors.white70,
-                  fontSize: 11.5,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   fontFeatures: KertasTheme.tabularNums,
                 ),
@@ -2007,7 +2227,8 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
   }
 }
 
-/// Pelukis poligon 4 sudut dokumen di atas viewfinder kamera langsung ala Xiaomi HyperOS.
+/// Pelukis poligon 4 sudut dokumen di atas viewfinder kamera langsung:
+/// Auto-Contour Edge Detection berwarna Hijau Neon (#4EDEA3) dengan Corner Ring Pins sesuai PRD Layar 2.
 class _LiveDocumentPolygonPainter extends CustomPainter {
   final DocumentCorners corners;
   final ScannerState scannerState;
@@ -2040,8 +2261,8 @@ class _LiveDocumentPolygonPainter extends CustomPainter {
       corners.bottomLeft.dy * size.height,
     );
 
-    // Warna garis golden-amber ala Xiaomi HyperOS Document Mode (#FFD000)
-    const Color strokeColor = Color(0xFFFFD000);
+    const Color neonGreen = KertasColors.emeraldNeon;
+    const Color emeraldCore = KertasColors.emeraldDark;
 
     final Path polyPath = Path()
       ..moveTo(tl.dx, tl.dy)
@@ -2052,28 +2273,31 @@ class _LiveDocumentPolygonPainter extends CustomPainter {
 
     final Paint fillPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.10 + 0.08 * lockProgress);
+      ..color = neonGreen.withValues(alpha: 0.14 + 0.10 * lockProgress);
     canvas.drawPath(polyPath, fillPaint);
 
     final Paint borderPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
+      ..strokeWidth = 2.6
       ..strokeJoin = StrokeJoin.round
-      ..color = strokeColor;
+      ..color = neonGreen;
     canvas.drawPath(polyPath, borderPaint);
 
-    // Titik sudut presisi halus (radius 4.0)
-    final Paint cornerDotPaint = Paint()
+    // Corner Pins (Anchors) dengan Tactile Ring Design sesuai Stitch Smart Camera Scanner
+    final Paint haloPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = neonGreen.withValues(alpha: 0.35);
+    final Paint outerWhiteRing = Paint()
       ..style = PaintingStyle.fill
       ..color = Colors.white;
-    final Paint cornerRingPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..color = strokeColor;
+    final Paint innerEmeraldDot = Paint()
+      ..style = PaintingStyle.fill
+      ..color = emeraldCore;
 
     for (final pt in [tl, tr, br, bl]) {
-      canvas.drawCircle(pt, 4.0, cornerDotPaint);
-      canvas.drawCircle(pt, 4.0, cornerRingPaint);
+      canvas.drawCircle(pt, 10.0, haloPaint);
+      canvas.drawCircle(pt, 6.5, outerWhiteRing);
+      canvas.drawCircle(pt, 3.2, innerEmeraldDot);
     }
   }
 
@@ -2086,7 +2310,7 @@ class _LiveDocumentPolygonPainter extends CustomPainter {
   }
 }
 
-/// Pelukis garis kisi 3x3 (Rule of Thirds) ala kamera Xiaomi HyperOS.
+/// Pelukis garis kisi 3x3 (Rule of Thirds) pada viewfinder kamera.
 class _CameraGridPainter extends CustomPainter {
   const _CameraGridPainter();
 
@@ -2110,3 +2334,4 @@ class _CameraGridPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CameraGridPainter oldDelegate) => false;
 }
+

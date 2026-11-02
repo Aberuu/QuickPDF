@@ -54,6 +54,31 @@ class LocalHistoryStore {
     await prefs.setStringList(_historyKey, encoded);
   }
 
+  /// Memperbarui entri riwayat (misal ganti nama berkas atau kategori)
+  static Future<void> updateHistoryEntry(PdfHistoryEntry updatedEntry) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = await loadHistory();
+    final updated = current
+        .map((e) => e.id == updatedEntry.id ? updatedEntry : e)
+        .toList();
+    final encoded = updated.map((e) => jsonEncode(e.toJson())).toList();
+    await prefs.setStringList(_historyKey, encoded);
+  }
+
+  /// Membersihkan seluruh daftar riwayat lokal
+  static Future<void> clearAllHistory({bool deletePhysicalFiles = false}) async {
+    if (deletePhysicalFiles) {
+      final current = await loadHistory();
+      for (final entry in current) {
+        if (entry.filePath != null) {
+          await deleteLocalFileIfPossible(entry.filePath);
+        }
+      }
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_historyKey);
+  }
+
   /// Memuat byte PDF untuk fitur Buka Ulang (Internal PDF Viewer)
   static Future<Uint8List?> resolvePdfBytes(PdfHistoryEntry entry) async {
     if (entry.pdfBytes != null && entry.pdfBytes!.isNotEmpty) {

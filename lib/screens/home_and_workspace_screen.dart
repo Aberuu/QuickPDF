@@ -13,6 +13,15 @@ import 'smart_scanner_sheet.dart';
 
 enum ActiveTab { workspace, history }
 
+enum HistorySortMode {
+  newest('Terbaru'),
+  largest('Ukuran Terbesar'),
+  nameAsc('Nama A-Z');
+
+  final String label;
+  const HistorySortMode(this.label);
+}
+
 class HomeAndWorkspaceScreen extends StatefulWidget {
   final ThemeMode currentThemeMode;
   final ValueChanged<ThemeMode> onThemeModeChanged;
@@ -32,6 +41,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
   final List<ScannedPageItem> _workspacePages = [];
   List<PdfHistoryEntry> _historyEntries = [];
   late final PageController _pageController;
+  final TextEditingController _searchController = TextEditingController();
 
   ActiveTab _activeTab = ActiveTab.history;
   bool _isLoadingHistory = true;
@@ -39,6 +49,9 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
   String _busyMessage = 'Memproses...';
   String? _errorBannerMessage;
   String _searchQuery = '';
+  PdfDocumentCategory _selectedCategory = PdfDocumentCategory.all;
+  HistorySortMode _historySortMode = HistorySortMode.newest;
+  DocumentFilterType _activeGlobalFilter = DocumentFilterType.magicColor;
 
   PaperSizeOption _defaultPaper = PaperSizeOption.a4;
   PageMarginOption _defaultMargin = PageMarginOption.small;
@@ -56,6 +69,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -105,7 +119,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     }
   }
 
-  /// Fase 1: Pilih satu atau banyak foto sekaligus dari Galeri (JPG, PNG, HEIC, WebP)
+  /// Pilih satu atau banyak foto sekaligus dari Galeri (JPG, PNG, HEIC, WebP)
   Future<void> _pickFromGallery() async {
     setState(() => _errorBannerMessage = null);
     try {
@@ -116,7 +130,8 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
 
       setState(() {
         _isBusyProcessing = true;
-        _busyMessage = 'Mendeteksi tepi & merapikan ${pickedFiles.length} foto dari galeri...';
+        _busyMessage =
+            'Mendeteksi tepi & merapikan ${pickedFiles.length} foto dari galeri...';
       });
 
       final List<ScannedPageItem> added = [];
@@ -133,12 +148,12 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
           originalBytes: bytes,
           displayBytes: bytes,
           corners: corners,
-          filter: DocumentFilterType.magicColor,
+          filter: _activeGlobalFilter,
         );
         final processed = await SmartScannerService.processPage(
           rawItem,
           corners: corners,
-          filter: DocumentFilterType.magicColor,
+          filter: _activeGlobalFilter,
         );
         added.add(processed);
       }
@@ -159,7 +174,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     }
   }
 
-  /// Fitur Utama: Tombol QuickPDF (In-App Live Camera + Auto-Capture Tanpa Tombol Shutter -> Langsung Buat PDF)
+  /// Fitur Utama: Tombol QuickPDF (In-App Live Camera + Auto-Capture -> Buat PDF)
   Future<void> _startQuickPdf() async {
     setState(() => _errorBannerMessage = null);
     final List<ScannedPageItem>? captured =
@@ -207,6 +222,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
             displayBytes: bytes,
             width: 900,
             height: 1200,
+            filter: _activeGlobalFilter,
           ),
         );
       }
@@ -226,7 +242,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     }
   }
 
-  /// Fase 2: Geser urutan halaman (Drag-and-drop & tombol urut)
+  /// Geser urutan halaman (Drag-and-drop & tombol urut)
   void _reorderPage(int fromIndex, int toIndex) {
     if (fromIndex == toIndex ||
         fromIndex < 0 ||
@@ -241,7 +257,63 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     });
   }
 
-  /// Fase 2: Putar orientasi halaman 90 derajat per klik (rotasi instan 0ms)
+  /// Balik urutan halaman di Meja Kerja (1..N menjadi N..1)
+  void _reverseWorkspaceOrder() {
+    if (_workspacePages.length < 2) return;
+    setState(() {
+      final reversed = _workspacePages.reversed.toList();
+      _workspacePages
+        ..clear()
+        ..addAll(reversed);
+    });
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Urutan halaman di Meja Kerja berhasil dibalik.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Terapkan Preset Filter Dokumen Global (Magic Color / Dokumen B&W / Warna Asli)
+  Future<void> _applyGlobalFilterPreset(DocumentFilterType preset) async {
+    setState(() {
+      _activeGlobalFilter = preset;
+    });
+    if (_workspacePages.isEmpty) return;
+
+    setState(() {
+      _isBusyProcessing = true;
+      _busyMessage =
+          'Menerapkan filter ${preset.workspacePresetLabel} ke ${_workspacePages.length} halaman...';
+    });
+
+    try {
+      final List<ScannedPageItem> updated = [];
+      for (final page in _workspacePages) {
+        final processed = await SmartScannerService.processPage(
+          page,
+          filter: preset,
+        );
+        updated.add(processed);
+      }
+      if (!mounted) return;
+      setState(() {
+        _workspacePages
+          ..clear()
+          ..addAll(updated);
+        _isBusyProcessing = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isBusyProcessing = false;
+        _errorBannerMessage = 'Gagal menerapkan filter global: $e';
+      });
+    }
+  }
+
+  /// Putar orientasi halaman 90 derajat per klik (rotasi instan 0ms)
   void _rotatePage90(int index) {
     if (index < 0 || index >= _workspacePages.length) return;
     final current = _workspacePages[index];
@@ -252,7 +324,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     });
   }
 
-  /// Fase 2: Hapus halaman dengan fitur Urungkan (Undo)
+  /// Hapus halaman dengan fitur Urungkan (Undo)
   void _deletePage(int index) {
     if (index < 0 || index >= _workspacePages.length) return;
     final removed = _workspacePages[index];
@@ -282,7 +354,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
-  /// Fase 2: Lihat Halaman Besar (Full-screen preview dengan pinch-to-zoom)
+  /// Lihat Halaman Besar (Full-screen preview dengan pinch-to-zoom)
   void _openFullScreenPreview(int index) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -296,7 +368,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
-  /// Fase 4: Buka Smart Scanner (Potong Tepi Otomatis, Luruskan 4 Sudut, Filter)
+  /// Buka Smart Scanner (Potong Tepi Otomatis, Luruskan 4 Sudut, Filter)
   Future<void> _openSmartScannerForPage(int index) async {
     if (index < 0 || index >= _workspacePages.length) return;
     final result = await Navigator.of(context).push<SmartScannerSheetResult>(
@@ -335,6 +407,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
       }
       if (!mounted) return;
       setState(() {
+        _activeGlobalFilter = targetFilter;
         _workspacePages
           ..clear()
           ..addAll(nextList);
@@ -347,7 +420,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     }
   }
 
-  /// Fase 4: Rapikan & Cerahkan Otomatis Semua Halaman sekaligus
+  /// Rapikan & Cerahkan Otomatis Semua Halaman sekaligus
   Future<void> _autoEnhanceAllPages() async {
     if (_workspacePages.isEmpty) return;
     setState(() {
@@ -371,6 +444,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
       }
       if (!mounted) return;
       setState(() {
+        _activeGlobalFilter = DocumentFilterType.magicColor;
         _workspacePages
           ..clear()
           ..addAll(enhancedList);
@@ -392,7 +466,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     }
   }
 
-  /// Fase 2 & Fase 3: Buka Panel Penyelesaian "Buat PDF" (Nama File, Ukuran Kertas, Kualitas, Simpan/Bagikan)
+  /// Buka Panel Penyelesaian "Buat PDF" (Nama File, Ukuran Kertas, Kualitas, Watermark, Sandi, Simpan/Bagikan)
   Future<void> _openExportPdfSheet() async {
     if (_workspacePages.isEmpty) return;
     final request = await showModalBottomSheet<ExportPdfRequest>(
@@ -415,7 +489,6 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     });
 
     try {
-      // Simpan preferensi ukuran kertas & kualitas sebagai default berikutnya
       _defaultPaper = request.paperSize;
       _defaultMargin = request.margin;
       _defaultQuality = request.quality;
@@ -432,6 +505,10 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
         marginOption: request.margin,
         qualityPreset: request.quality,
         saveToDevice: request.actionType == ExportActionType.saveToDevice,
+        includeWatermark: request.includeWatermark,
+        watermarkText: request.watermarkText,
+        isPasswordProtected: request.isPasswordProtected,
+        password: request.password,
       );
 
       await LocalHistoryStore.addHistoryEntry(genResult.historyEntry);
@@ -482,8 +559,98 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     }
   }
 
-  /// Fase 3: Buka ulang dokumen PDF dari daftar Riwayat
+  /// Verifikasi Kata Sandi Dokumen sebelum dibuka atau dibagikan jika terkunci
+  Future<bool> _verifyPasswordIfNeeded(PdfHistoryEntry entry) async {
+    if (!entry.isPasswordProtected ||
+        entry.password == null ||
+        entry.password!.isEmpty) {
+      return true;
+    }
+
+    String typedPassword = '';
+    String? errorText;
+
+    final verified = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.lock_outline, size: 20, color: KertasColors.coralRed),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Dokumen Terkunci Sandi',
+                      style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Masukkan kata sandi untuk membuka "${entry.fileName}":',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      obscureText: true,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Kata sandi dokumen...',
+                        errorText: errorText,
+                        prefixIcon: const Icon(Icons.key_outlined, size: 18),
+                      ),
+                      onChanged: (val) => typedPassword = val,
+                      onSubmitted: (val) {
+                        if (val == entry.password) {
+                          Navigator.of(ctx).pop(true);
+                        } else {
+                          setDialogState(() {
+                            errorText = 'Kata sandi tidak sesuai.';
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (typedPassword == entry.password) {
+                      Navigator.of(ctx).pop(true);
+                    } else {
+                      setDialogState(() {
+                        errorText = 'Kata sandi tidak sesuai.';
+                      });
+                    }
+                  },
+                  child: const Text('Buka Dokumen'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    return verified ?? false;
+  }
+
+  /// Buka ulang dokumen PDF dari daftar Riwayat
   Future<void> _openHistoryPdf(PdfHistoryEntry entry) async {
+    final allowed = await _verifyPasswordIfNeeded(entry);
+    if (!allowed || !mounted) return;
+
     final bytes = await LocalHistoryStore.resolvePdfBytes(entry);
     if (!mounted) return;
     if (bytes == null || bytes.isEmpty) {
@@ -503,8 +670,11 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
-  /// Fase 3: Bagikan ulang dokumen dari daftar Riwayat
+  /// Bagikan ulang dokumen dari daftar Riwayat
   Future<void> _shareHistoryPdf(PdfHistoryEntry entry) async {
+    final allowed = await _verifyPasswordIfNeeded(entry);
+    if (!allowed || !mounted) return;
+
     final bytes = await LocalHistoryStore.resolvePdfBytes(entry);
     if (!mounted) return;
     if (bytes == null || bytes.isEmpty) {
@@ -520,7 +690,207 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
-  /// Fase 3: Dialog Hapus dari Riwayat (Pilihan hapus dari aplikasi saja atau hapus permanen)
+  /// Ganti Nama Berkas dari Menu Kontekstual 3-Titik
+  Future<void> _renameHistoryEntry(PdfHistoryEntry entry) async {
+    final initialBase = entry.fileName.replaceAll(
+      RegExp(r'\.pdf$', caseSensitive: false),
+      '',
+    );
+    String typedName = initialBase;
+    PdfDocumentCategory chosenCategory = entry.category;
+
+    final updatedEntry = await showDialog<PdfHistoryEntry>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text(
+                'Ganti Nama & Kategori Berkas',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      initialValue: initialBase,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Nama File PDF',
+                        suffixText: '.pdf',
+                      ),
+                      onChanged: (val) => typedName = val,
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Kategori Dokumen',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: PdfDocumentCategory.values
+                          .where((c) => c != PdfDocumentCategory.all)
+                          .map((cat) {
+                        return ChoiceChip(
+                          selected: chosenCategory == cat,
+                          label: Text(cat.shortBadgeLabel),
+                          onSelected: (_) {
+                            setDialogState(() => chosenCategory = cat);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final sanitized = PdfGeneratorService.sanitizeFileName(
+                      typedName,
+                    );
+                    Navigator.of(ctx).pop(
+                      entry.copyWith(
+                        fileName: sanitized,
+                        category: chosenCategory,
+                      ),
+                    );
+                  },
+                  child: const Text('Simpan Nama'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (updatedEntry == null || !mounted) return;
+    await LocalHistoryStore.updateHistoryEntry(updatedEntry);
+    final refreshed = await LocalHistoryStore.loadHistory();
+    if (!mounted) return;
+    setState(() {
+      _historyEntries = refreshed;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Nama berkas diperbarui menjadi "${updatedEntry.fileName}".'),
+      ),
+    );
+  }
+
+  /// Modal Menu Kontekstual 3-Titik (Kelola Berkas PDF Lokal — PRD 3.4)
+  Future<void> _openDocumentActionModal(PdfHistoryEntry entry) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? KertasColors.darkSurfaceLow : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: theme.dividerColor,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Kelola Berkas PDF Lokal',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${entry.fileName} • ${KertasFormatters.formatBytes(entry.fileSizeBytes)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.textTheme.bodySmall?.color,
+                    fontFeatures: KertasTheme.tabularNums,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 14),
+                _ModalActionTile(
+                  icon: Icons.print_outlined,
+                  iconColor: KertasColors.emeraldNeon,
+                  title: 'Cetak & Pratinjau Dokumen (Print)',
+                  subtitle: 'Buka lembar baca PDF untuk mencetak atau memeriksa halaman',
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _openHistoryPdf(entry);
+                  },
+                ),
+                const SizedBox(height: 8),
+                _ModalActionTile(
+                  icon: Icons.drive_file_rename_outline,
+                  iconColor: theme.colorScheme.primary,
+                  title: 'Ganti Nama Berkas',
+                  subtitle: 'Ubah nama file dan label kategori dokumen',
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _renameHistoryEntry(entry);
+                  },
+                ),
+                const SizedBox(height: 8),
+                _ModalActionTile(
+                  icon: Icons.share_outlined,
+                  iconColor: const Color(0xFF38BDF8),
+                  title: 'Bagikan Dokumen PDF',
+                  subtitle: 'Kirim ke WhatsApp, Google Drive, atau Email',
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _shareHistoryPdf(entry);
+                  },
+                ),
+                const SizedBox(height: 8),
+                _ModalActionTile(
+                  icon: Icons.delete_forever_outlined,
+                  iconColor: KertasColors.dangerRed,
+                  title: 'Hapus dari Memori HP',
+                  subtitle: 'Hapus berkas dari daftar riwayat atau memori lokal',
+                  isDestructive: true,
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _confirmDeleteHistory(entry);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Dialog Hapus dari Riwayat (Pilihan hapus dari aplikasi saja atau hapus permanen)
   Future<void> _confirmDeleteHistory(PdfHistoryEntry entry) async {
     final choice = await showDialog<String>(
       context: context,
@@ -574,7 +944,56 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
-  /// Fase 3: Dialog Pengaturan Default PDF & Tema Tampilan
+  /// Bersihkan semua riwayat dokumen dengan konfirmasi
+  Future<void> _confirmClearAllHistory() async {
+    if (_historyEntries.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Penyimpanan riwayat sudah bersih (0 berkas).'),
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bersihkan Semua Riwayat?'),
+        content: Text(
+          'Hapus ${_historyEntries.length} catatan dokumen dari daftar riwayat aplikasi?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: KertasColors.dangerRed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Bersihkan Semua'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    await LocalHistoryStore.clearAllHistory(deletePhysicalFiles: false);
+    final refreshed = await LocalHistoryStore.loadHistory();
+    if (!mounted) return;
+    setState(() {
+      _historyEntries = refreshed;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Daftar riwayat dokumen berhasil dibersihkan.'),
+      ),
+    );
+  }
+
+  /// Dialog Pengaturan Default PDF & Tema Tampilan
   Future<void> _openSettingsDialog() async {
     PaperSizeOption tempPaper = _defaultPaper;
     PageMarginOption tempMargin = _defaultMargin;
@@ -750,7 +1169,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                         width: 7,
                         height: 7,
                         decoration: const BoxDecoration(
-                          color: KertasColors.successGreen,
+                          color: KertasColors.emeraldNeon,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -800,7 +1219,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
               children: [
                 // Navigasi Tab Kontekstual: Meja Kerja Aktif vs Riwayat PDF
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
                   child: Row(
                     children: [
                       Expanded(
@@ -828,8 +1247,8 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                 if (_errorBannerMessage != null)
                   Container(
                     width: double.infinity,
-                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: KertasColors.dangerRed.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
@@ -840,14 +1259,14 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                         const Icon(
                           Icons.error_outline,
                           color: KertasColors.dangerRed,
-                          size: 20,
+                          size: 18,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _errorBannerMessage!,
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: 12,
                               color: theme.colorScheme.onSurface,
                               fontWeight: FontWeight.w500,
                             ),
@@ -855,8 +1274,10 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                         ),
                         IconButton(
                           tooltip: 'Tutup pesan kesalahan',
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: () => setState(() => _errorBannerMessage = null),
+                          icon: const Icon(Icons.close, size: 16),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () =>
+                              setState(() => _errorBannerMessage = null),
                         ),
                       ],
                     ),
@@ -867,7 +1288,8 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                   child: PageView(
                     controller: _pageController,
                     onPageChanged: (index) {
-                      final newTab = index == 0 ? ActiveTab.workspace : ActiveTab.history;
+                      final newTab =
+                          index == 0 ? ActiveTab.workspace : ActiveTab.history;
                       if (_activeTab != newTab) {
                         setState(() => _activeTab = newTab);
                       }
@@ -892,7 +1314,10 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                   child: Card(
                     margin: const EdgeInsets.symmetric(horizontal: 32),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 20,
+                      ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -921,8 +1346,10 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
-  /// Tampilan Meja Kerja / Workspace Editor (Fase 1, 2, 4)
+  /// Layar 1: Tampilan Meja Kerja / Workspace Editor (PRD Section 3.1)
   Widget _buildWorkspaceEditorView(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+
     if (_workspacePages.isEmpty) {
       return Center(
         child: SingleChildScrollView(
@@ -969,43 +1396,206 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
       );
     }
 
+    final presetOptions = [
+      DocumentFilterType.magicColor,
+      DocumentFilterType.blackAndWhite,
+      DocumentFilterType.original,
+    ];
+
     return Column(
       children: [
-        // Baris Aksi Cepat Workspace (Bebas Overflow pada Layar Sempit 320px)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                'Tekan & geser kartu untuk mengatur urutan.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: theme.textTheme.bodySmall?.color,
+        // 1. Workspace Status & Quick Action Bar (PRD 3.1: Tambah | Urutkan | Bersihkan)
+        SizedBox(
+          height: 30,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Text(
+                  'Meja Kerja Aktif',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
-              ),
-              TextButton.icon(
-                onPressed: _autoEnhanceAllPages,
-                icon: const Icon(Icons.auto_fix_high_outlined, size: 17),
-                label: const Text('Rapikan Semua'),
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _workspacePages.clear();
-                  });
-                },
-                icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                label: const Text('Kosongkan'),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: KertasColors.emeraldNeon.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(
+                      color: KertasColors.emeraldNeon.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    '${_workspacePages.length} Hal Siap',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: isDark
+                          ? KertasColors.emeraldNeon
+                          : KertasColors.successGreen,
+                      fontFeatures: KertasTheme.tabularNums,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _CompactWorkspaceActionBtn(
+                  icon: Icons.add_photo_alternate_outlined,
+                  label: 'Tambah',
+                  onTap: _pickFromGallery,
+                ),
+                const SizedBox(width: 4),
+                _CompactWorkspaceActionBtn(
+                  icon: Icons.swap_vert_rounded,
+                  label: 'Urutkan',
+                  onTap: _reverseWorkspaceOrder,
+                ),
+                const SizedBox(width: 4),
+                _CompactWorkspaceActionBtn(
+                  icon: Icons.delete_sweep_outlined,
+                  label: 'Bersihkan',
+                  isDestructive: true,
+                  onTap: () {
+                    setState(() {
+                      _workspacePages.clear();
+                    });
+                  },
+                ),
+              ],
+            ),
           ),
         ),
+        const SizedBox(height: 4),
 
-        // Grid Halaman Interaktif (Drag-and-Drop + Kontrol Cepat per Halaman)
+        // 2. Global Preset Filter Bar (PRD 3.1: Magic Color | Dokumen B&W | Warna Asli)
+        SizedBox(
+          height: 32,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    'Preset Filter:',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: theme.textTheme.bodySmall?.color,
+                    ),
+                  ),
+                ),
+                ...presetOptions.map((preset) {
+                  final isSelected = _activeGlobalFilter == preset;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => _applyGlobalFilterPreset(preset),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? theme.colorScheme.primary.withValues(alpha: 0.14)
+                              : (isDark
+                                  ? KertasColors.darkSurfaceLow
+                                  : theme.colorScheme.surface),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : theme.dividerColor,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              preset == DocumentFilterType.magicColor
+                                  ? Icons.auto_awesome
+                                  : preset == DocumentFilterType.blackAndWhite
+                                      ? Icons.contrast
+                                      : Icons.image_outlined,
+                              size: 13,
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.textTheme.bodySmall?.color,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              preset.workspacePresetLabel,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSelected
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                Padding(
+                  padding: const EdgeInsets.only(left: 2),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: _autoEnhanceAllPages,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? KertasColors.darkSurfaceLow
+                            : theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: theme.dividerColor),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.auto_fix_high_outlined,
+                            size: 13,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Rapikan Semua',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+
+        // 3. Grid Halaman Interaktif (Drag-and-Drop + Kontrol Cepat per Halaman + Kartu Tambah Lembar)
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -1017,18 +1607,24 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                       : width >= 620
                           ? 3
                           : 2;
-              final aspectRatio = width < 350 ? 0.85 : 0.66;
+              final aspectRatio = width < 350 ? 0.85 : 0.71;
 
               return GridView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                   childAspectRatio: aspectRatio,
                 ),
-                itemCount: _workspacePages.length,
+                itemCount: _workspacePages.length + 1,
                 itemBuilder: (context, index) {
+                  if (index == _workspacePages.length) {
+                    return _AddMorePageCard(
+                      onTapCamera: _startQuickPdf,
+                      onTapGallery: _pickFromGallery,
+                    );
+                  }
                   final page = _workspacePages[index];
                   return _DraggablePageCard(
                     key: ValueKey(page.id),
@@ -1050,77 +1646,325 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
-  /// Tampilan Beranda & Riwayat PDF Terbaru (Fase 3)
+  /// Layar 4: Tampilan Riwayat & Dokumen PDF (PRD Section 3.4)
   Widget _buildHistoryHomeView(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+
     if (_isLoadingHistory) {
       return const Center(
         child: CircularProgressIndicator(),
       );
     }
 
+    // Filter berdasarkan pencarian & kategori
     final filtered = _historyEntries.where((e) {
+      final matchesCategory = _selectedCategory == PdfDocumentCategory.all ||
+          e.category == _selectedCategory;
+      if (!matchesCategory) return false;
       if (_searchQuery.trim().isEmpty) return true;
-      return e.fileName.toLowerCase().contains(_searchQuery.trim().toLowerCase());
+      return e.fileName
+          .toLowerCase()
+          .contains(_searchQuery.trim().toLowerCase());
     }).toList();
 
+    // Urutkan sesuai _historySortMode
+    switch (_historySortMode) {
+      case HistorySortMode.newest:
+        filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+      case HistorySortMode.largest:
+        filtered.sort((a, b) => b.fileSizeBytes.compareTo(a.fileSizeBytes));
+        break;
+      case HistorySortMode.nameAsc:
+        filtered.sort(
+          (a, b) => a.fileName.toLowerCase().compareTo(b.fileName.toLowerCase()),
+        );
+        break;
+    }
+
+    final totalHistoryBytes = _historyEntries.fold<int>(
+      0,
+      (sum, item) => sum + item.fileSizeBytes,
+    );
+
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       children: [
-        // Header Riwayat PDF + Pencarian
+        // 1. Search Bar & Category Filter Pills (PRD 3.4)
+        SizedBox(
+          height: 40,
+          child: TextField(
+            controller: _searchController,
+            style: const TextStyle(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Cari dokumen PDF...',
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              prefixIcon: const Icon(Icons.search, size: 18),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      tooltip: 'Bersihkan pencarian',
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: (val) => setState(() => _searchQuery = val),
+          ),
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 30,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: PdfDocumentCategory.values.map((cat) {
+                final selected = _selectedCategory == cat;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(99),
+                    onTap: () => setState(() => _selectedCategory = cat),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? theme.colorScheme.primary
+                            : (isDark
+                                ? KertasColors.darkSurfaceLow
+                                : theme.colorScheme.surface),
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(
+                          color: selected
+                              ? theme.colorScheme.primary
+                              : theme.dividerColor,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          cat.label,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w600,
+                            color: selected
+                                ? Colors.white
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // 2. Offline Storage Banner (Penyimpanan Offline — PRD 3.4)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? KertasColors.darkSurfaceLow : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: KertasColors.emeraldNeon.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(
+                  Icons.sd_storage_outlined,
+                  size: 18,
+                  color: isDark
+                      ? KertasColors.emeraldNeon
+                      : KertasColors.successGreen,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Flexible(
+                          child: Text(
+                            'Penyimpanan Offline',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: KertasColors.emeraldNeon.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            'Aman',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: isDark
+                                  ? KertasColors.emeraldNeon
+                                  : KertasColors.successGreen,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_historyEntries.length} Dokumen PDF • ${KertasFormatters.formatBytes(totalHistoryBytes)} terpakai',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.textTheme.bodySmall?.color,
+                        fontFeatures: KertasTheme.tabularNums,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Urutkan Dokumen (${_historySortMode.label})',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                icon: const Icon(Icons.sort_rounded, size: 18),
+                onPressed: () {
+                  final nextIdx =
+                      (_historySortMode.index + 1) % HistorySortMode.values.length;
+                  final nextMode = HistorySortMode.values[nextIdx];
+                  setState(() => _historySortMode = nextMode);
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Diurutkan berdasarkan: ${nextMode.label}'),
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                tooltip: 'Bersihkan Penyimpanan Riwayat',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                icon: const Icon(Icons.cleaning_services_outlined, size: 17),
+                onPressed: _confirmClearAllHistory,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // 3. Header Riwayat PDF Terbaru
         Row(
           children: [
             const Expanded(
               child: Text(
                 'Riwayat PDF Terbaru',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            Text(
-              '${_historyEntries.length} berkas',
-              style: TextStyle(
-                fontSize: 12.5,
-                color: theme.textTheme.bodySmall?.color,
-                fontFeatures: KertasTheme.tabularNums,
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${filtered.length} berkas',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.primary,
+                  fontFeatures: KertasTheme.tabularNums,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.verified_user_outlined,
+                    size: 13,
+                    color: isDark
+                        ? KertasColors.emeraldNeon
+                        : KertasColors.successGreen,
+                  ),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(
+                      'Tersinkron Lokal',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? KertasColors.emeraldNeon
+                            : KertasColors.successGreen,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
-        if (_historyEntries.isNotEmpty) ...[
-          TextField(
-            decoration: const InputDecoration(
-              hintText: 'Cari nama file PDF di riwayat...',
-              prefixIcon: Icon(Icons.search, size: 20),
-            ),
-            onChanged: (val) => setState(() => _searchQuery = val),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Empty State Riwayat PDF (R-27)
+        // 4. Empty State / Filtered List
         if (_historyEntries.isEmpty)
           Card(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(
                 children: [
                   Icon(
                     Icons.folder_open_outlined,
-                    size: 40,
+                    size: 38,
                     color: theme.textTheme.bodySmall?.color,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   const Text(
                     'Belum Ada Riwayat Dokumen PDF',
-                    style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     'Dokumen PDF yang Anda simpan atau bagikan akan otomatis tercatat di sini lengkap dengan pratinjau halaman pertama dan ukuran filenya.',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12.5,
                       color: theme.textTheme.bodySmall?.color,
                     ),
                     textAlign: TextAlign.center,
@@ -1134,7 +1978,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Text(
-                'Tidak ada dokumen dengan kata kunci "$_searchQuery".',
+                'Tidak ada dokumen yang cocok dengan filter atau kata kunci "$_searchQuery".',
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1145,11 +1989,11 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
               padding: const EdgeInsets.only(bottom: 10),
               child: Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Thumbnail Halaman Pertama (Identity Motif Sudut Kertas 6px)
+                      // Thumbnail Halaman Pertama + Badge Jumlah Halaman
                       InkWell(
                         onTap: () => _openHistoryPdf(entry),
                         child: Container(
@@ -1161,69 +2005,218 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                             border: Border.all(color: theme.dividerColor),
                           ),
                           clipBehavior: Clip.antiAlias,
-                          child: entry.thumbnailBytes.isNotEmpty
-                              ? Image.memory(
-                                  entry.thumbnailBytes,
-                                  fit: BoxFit.cover,
-                                  gaplessPlayback: true,
-                                )
-                              : const Icon(Icons.picture_as_pdf_outlined),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              entry.thumbnailBytes.isNotEmpty
+                                  ? Image.memory(
+                                      entry.thumbnailBytes,
+                                      fit: BoxFit.cover,
+                                      gaplessPlayback: true,
+                                    )
+                                  : const Icon(Icons.picture_as_pdf_outlined),
+                              Positioned(
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  color: Colors.black.withValues(alpha: 0.72),
+                                  child: Text(
+                                    '${entry.pageCount} Hal',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      fontFeatures: KertasTheme.tabularNums,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (entry.isPasswordProtected)
+                                Positioned(
+                                  top: 3,
+                                  right: 3,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      color: KertasColors.coralRed,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.lock,
+                                      size: 10,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Baris Kategori + Timestamp
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary
+                                        .withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    entry.category.shortBadgeLabel,
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    KertasFormatters.formatTimestamp(
+                                      entry.createdAt,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: theme.textTheme.bodySmall?.color,
+                                      fontFeatures: KertasTheme.tabularNums,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
                             Text(
                               entry.fileName,
                               style: const TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${entry.pageCount} Hal • ${KertasFormatters.formatBytes(entry.fileSizeBytes)} • ${entry.paperSize.code.toUpperCase()}',
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.primary,
-                                fontFeatures: KertasTheme.tabularNums,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              KertasFormatters.formatTimestamp(entry.createdAt),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: theme.textTheme.bodySmall?.color,
-                                fontFeatures: KertasTheme.tabularNums,
-                              ),
+                            const SizedBox(height: 3),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 2,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  '${KertasFormatters.formatBytes(entry.fileSizeBytes)} • ${entry.quality.historyQualityLabel}',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.primary,
+                                    fontFeatures: KertasTheme.tabularNums,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: KertasColors.emeraldNeon
+                                        .withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'OCR Siap',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark
+                                          ? KertasColors.emeraldNeon
+                                          : KertasColors.successGreen,
+                                    ),
+                                  ),
+                                ),
+                                if (entry.hasWatermark)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withValues(alpha: 0.16),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'Watermark',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFFD97706),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                      // Tombol Buka, Bagikan, dan Hapus
+                      // Tombol Pratinjau, Bagikan, Hapus, dan Menu 3-Titik
                       IconButton(
                         tooltip: 'Buka & Baca PDF',
-                        icon: const Icon(Icons.visibility_outlined),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        icon: const Icon(Icons.visibility_outlined, size: 19),
                         onPressed: () => _openHistoryPdf(entry),
                       ),
                       IconButton(
                         tooltip: 'Bagikan ke WhatsApp / Drive / Email',
-                        icon: const Icon(Icons.share_outlined),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        icon: const Icon(Icons.share_outlined, size: 18),
                         onPressed: () => _shareHistoryPdf(entry),
                       ),
                       IconButton(
                         tooltip: 'Hapus dari Riwayat',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
                         icon: const Icon(
                           Icons.delete_outline,
+                          size: 19,
                           color: KertasColors.dangerRed,
                         ),
                         onPressed: () => _confirmDeleteHistory(entry),
+                      ),
+                      IconButton(
+                        tooltip: 'Menu Dokumen',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 32,
+                        ),
+                        icon: const Icon(Icons.more_vert, size: 18),
+                        onPressed: () => _openDocumentActionModal(entry),
                       ),
                     ],
                   ),
@@ -1231,12 +2224,59 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
               ),
             );
           }),
+
+        // 5. Kartu Info Keamanan Lokal (Privasi Berkas Mutlak — PRD 3.4)
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark
+                ? KertasColors.darkSurfaceLow.withValues(alpha: 0.7)
+                : theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 20,
+                color: isDark
+                    ? KertasColors.emeraldNeon
+                    : KertasColors.successGreen,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Privasi Berkas Mutlak',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Seluruh dokumen PDF diproses dan disimpan langsung di memori internal perangkat Anda tanpa unggahan ke server cloud.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
   /// Panel Bawah Ramah Satu Tangan (Thumb-Friendly):
-  /// Menampilkan tombol Galeri (kiri), tombol utama QuickPDF (tengah, 64px), dan tombol Meja Kerja (kanan),
+  /// Menampilkan tombol Galeri (kiri), tombol utama QuickPDF (tengah), dan tombol Meja Kerja (kanan),
   /// serta pintasan "Buat PDF" saat ada halaman di Workspace.
   Widget _buildBottomActionBar(ThemeData theme) {
     final hasPages = _workspacePages.isNotEmpty;
@@ -1246,7 +2286,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(top: BorderSide(color: theme.dividerColor)),
@@ -1259,27 +2299,33 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(0, 48),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                 ),
                 onPressed: _openExportPdfSheet,
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
                 label: Text(
                   'Buat PDF (${_workspacePages.length})',
-                  style: const TextStyle(fontFeatures: KertasTheme.tabularNums),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: KertasTheme.tabularNums,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
           ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Kiri: Galeri (52px)
+              // Kiri: Galeri (50px)
               Expanded(
                 flex: 3,
                 child: SizedBox(
-                  height: 52,
+                  height: 50,
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1307,17 +2353,20 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
               ),
               const SizedBox(width: 8),
 
-              // Tengah: Tombol Utama QuickPDF (64px, Vermilion #D9381E)
+              // Tengah: Tombol Utama QuickPDF (58px, Vermilion #D9381E)
               Expanded(
                 flex: 4,
                 child: SizedBox(
-                  height: 64,
+                  height: 58,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: KertasColors.vermilionStamp,
                       foregroundColor: Colors.white,
                       elevation: 2,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -1330,13 +2379,13 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.document_scanner_outlined, size: 20),
+                            Icon(Icons.document_scanner_outlined, size: 19),
                             SizedBox(width: 6),
                             Flexible(
                               child: Text(
                                 'QuickPDF',
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: 14.5,
                                   fontWeight: FontWeight.w800,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -1344,7 +2393,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                             ),
                           ],
                         ),
-                        SizedBox(height: 2),
+                        SizedBox(height: 1),
                         Text(
                           'Auto-Scan',
                           style: TextStyle(
@@ -1361,11 +2410,11 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
               ),
               const SizedBox(width: 8),
 
-              // Kanan: Meja Kerja (52px)
+              // Kanan: Meja Kerja (50px)
               Expanded(
                 flex: 3,
                 child: SizedBox(
-                  height: 52,
+                  height: 50,
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1399,14 +2448,14 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
             ],
           ),
           if (hasPages) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 5),
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    '${_workspacePages.length} Halaman siap digabung',
+                    'Konversi & Simpan ke PDF (${_workspacePages.length} Hal)',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11.5,
                       color: theme.textTheme.bodySmall?.color,
                       fontFeatures: KertasTheme.tabularNums,
                     ),
@@ -1416,10 +2465,10 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    'Estimasi: ~${KertasFormatters.formatBytes(estimatedBytes)}',
+                    'Est. ~${KertasFormatters.formatBytes(estimatedBytes)}',
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
                       color: theme.textTheme.bodySmall?.color,
                       fontFeatures: KertasTheme.tabularNums,
                     ),
@@ -1429,6 +2478,243 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactWorkspaceActionBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  const _CompactWorkspaceActionBtn({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color =
+        isDestructive ? KertasColors.dangerRed : theme.colorScheme.onSurface;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDestructive
+                ? KertasColors.dangerRed.withValues(alpha: 0.35)
+                : theme.dividerColor,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModalActionTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  const _ModalActionTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return Material(
+      color: isDestructive
+          ? KertasColors.dangerRed.withValues(alpha: 0.08)
+          : (isDark ? KertasColors.darkSurface : theme.colorScheme.surface),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDestructive
+                  ? KertasColors.dangerRed.withValues(alpha: 0.3)
+                  : theme.dividerColor,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 19, color: iconColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: isDestructive
+                            ? KertasColors.dangerRed
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: theme.textTheme.bodySmall?.color,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddMorePageCard extends StatelessWidget {
+  final VoidCallback onTapCamera;
+  final VoidCallback onTapGallery;
+
+  const _AddMorePageCard({
+    required this.onTapCamera,
+    required this.onTapGallery,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? KertasColors.darkSurfaceLow.withValues(alpha: 0.6)
+            : theme.colorScheme.surface.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.dividerColor,
+          width: 1.2,
+        ),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.add_rounded,
+              size: 24,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Tambah Lembar',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Kamera / Galeri',
+            style: TextStyle(
+              fontSize: 11,
+              color: theme.textTheme.bodySmall?.color,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  ),
+                  onPressed: onTapCamera,
+                  child: const Text(
+                    'Kamera',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  ),
+                  onPressed: onTapGallery,
+                  child: const Text(
+                    'Galeri',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1458,7 +2744,7 @@ class _TabSwitchButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
         child: Container(
-          height: 46,
+          height: 42,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
@@ -1471,17 +2757,17 @@ class _TabSwitchButton extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size: 18,
+                size: 17,
                 color: isSelected
                     ? theme.colorScheme.onPrimary
                     : theme.colorScheme.onSurface,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 7),
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: isSelected
                         ? theme.colorScheme.onPrimary
@@ -1537,7 +2823,7 @@ class _DraggablePageCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             child: SizedBox(
               width: 165,
-              height: 235,
+              height: 230,
               child: _buildCardContent(context, isHoveredTarget: true),
             ),
           ),
@@ -1556,7 +2842,10 @@ class _DraggablePageCard extends StatelessWidget {
     required bool isHoveredTarget,
   }) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final pageNum = (index + 1).toString().padLeft(2, '0');
+    final formatBadge = page.detectedFormatLabel(index);
+    final qualityBadge = page.qualityBadgeLabel(index);
 
     return Container(
       decoration: BoxDecoration(
@@ -1570,16 +2859,16 @@ class _DraggablePageCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header Kartu: Nomor Indeks Pojok Kertas + Geser Urutan
+          // Header Kartu: Nomor Indeks (#01) + Label Sumber + Geser Urutan
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: theme.dividerColor)),
             ),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primary,
                     borderRadius: BorderRadius.circular(5),
@@ -1588,18 +2877,18 @@ class _DraggablePageCard extends StatelessWidget {
                     pageNum,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w800,
                       fontFeatures: KertasTheme.tabularNums,
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     page.sourceLabel,
                     style: const TextStyle(
-                      fontSize: 11.5,
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
@@ -1609,18 +2898,18 @@ class _DraggablePageCard extends StatelessWidget {
                 // Tombol geser urutan kiri/kanan (aksesibel keyboard & satu ketukan)
                 IconButton(
                   tooltip: 'Geser ke urutan sebelumnya',
-                  icon: const Icon(Icons.chevron_left, size: 18),
+                  icon: const Icon(Icons.chevron_left, size: 17),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                   onPressed: index > 0 ? () => onMovePage(index, index - 1) : null,
                 ),
                 IconButton(
                   tooltip: 'Geser ke urutan berikutnya',
-                  icon: const Icon(Icons.chevron_right, size: 18),
+                  icon: const Icon(Icons.chevron_right, size: 17),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                   onPressed: index < totalCount - 1
                       ? () => onMovePage(index, index + 1)
                       : null,
@@ -1634,7 +2923,7 @@ class _DraggablePageCard extends StatelessWidget {
             child: InkWell(
               onTap: onTapPreview,
               child: Container(
-                margin: const EdgeInsets.all(8),
+                margin: const EdgeInsets.fromLTRB(6, 5, 6, 5),
                 decoration: BoxDecoration(
                   color: const Color(0xFFECE8DF),
                   borderRadius: BorderRadius.circular(6),
@@ -1654,40 +2943,67 @@ class _DraggablePageCard extends StatelessWidget {
                         gaplessPlayback: true,
                       ),
                     ),
-                    if (page.isEnhanced || page.rotationQuarterTurns > 0)
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.72),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            page.filter != DocumentFilterType.original
-                                ? page.filter.label
-                                : 'Dirapikan',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    // Top-left format badge (A4 Auto / ID Card / Kwitansi)
+                    Positioned(
+                      top: 5,
+                      left: 5,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.72),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          formatBadge,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
+                    ),
+                    // Bottom-left quality badge (Tajam / Tegak / Auto-Crop)
                     Positioned(
-                      bottom: 6,
-                      right: 6,
+                      bottom: 5,
+                      left: 5,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? KertasColors.darkSurfaceLowest.withValues(alpha: 0.85)
+                              : Colors.black.withValues(alpha: 0.68),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          qualityBadge,
+                          style: const TextStyle(
+                            color: KertasColors.emeraldNeon,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Bottom-right Zoom button
+                    Positioned(
+                      bottom: 5,
+                      right: 5,
+                      child: Container(
+                        padding: const EdgeInsets.all(3.5),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.65),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Icon(
                           Icons.zoom_in,
-                          size: 15,
+                          size: 14,
                           color: Colors.white,
                         ),
                       ),
@@ -1700,7 +3016,7 @@ class _DraggablePageCard extends StatelessWidget {
 
           // Baris Tombol Aksi Cepat per Halaman: Putar 90°, Rapikan/Filter, Hapus
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
             decoration: BoxDecoration(
               border: Border(top: BorderSide(color: theme.dividerColor)),
             ),
@@ -1709,23 +3025,32 @@ class _DraggablePageCard extends StatelessWidget {
                 Expanded(
                   child: IconButton(
                     tooltip: 'Putar Halaman 90°',
-                    icon: const Icon(Icons.rotate_90_degrees_cw_outlined, size: 19),
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(minHeight: 32),
+                    icon: const Icon(
+                      Icons.rotate_90_degrees_cw_outlined,
+                      size: 18,
+                    ),
                     onPressed: onRotate90,
                   ),
                 ),
                 Expanded(
                   child: IconButton(
                     tooltip: 'Rapikan Tepi & Filter Dokumen',
-                    icon: const Icon(Icons.crop_rotate, size: 19),
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(minHeight: 32),
+                    icon: const Icon(Icons.crop_rotate, size: 18),
                     onPressed: onOpenScanner,
                   ),
                 ),
                 Expanded(
                   child: IconButton(
                     tooltip: 'Hapus Halaman',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(minHeight: 32),
                     icon: const Icon(
                       Icons.delete_outline,
-                      size: 19,
+                      size: 18,
                       color: KertasColors.dangerRed,
                     ),
                     onPressed: onDelete,

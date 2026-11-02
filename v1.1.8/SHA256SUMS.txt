@@ -1,0 +1,5 @@
+﻿8ada5011f86801e7289799396d4dda371225b15ab0f982328b4a1093a754fffb  QuickPDF-v1.1.8-arm64-v8a.apk
+74351810a714ddba92a89a17b0107e3a7ab4d9b316ae504ac62b079f5ca2e283  QuickPDF-v1.1.8-armeabi-v7a.apk
+efa077f210a31359f57d18e7dcd0d92bbff98f1cb1e67a6295f2b65e98380886  QuickPDF-v1.1.8-x86_64.apk
+f8034dbbaef6bf26b8b0b98d49ab7e5e7e30058119903f2324e6eb9a44ea6184  QuickPDF-v1.1.8-universal.apk
+ecbd466cf8e904eab474fbedfe72052da6f1f6de678321dffd43cfbfe8bc3700  QuickPDF-v1.1.8-web.zip

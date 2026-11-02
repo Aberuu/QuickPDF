@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="id"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "secondary-fixed": "#ffdad6",
+          "surface-tint": "#ffb3ad",
+          "surface": "#121316",
+          "tertiary-fixed": "#87f4f0",
+          "surface-container-highest": "#343538",
+          "tertiary-container": "#24a09d",
+          "inverse-on-surface": "#2f3034",
+          "on-secondary-fixed": "#410002",
+          "primary-container": "#ff5451",
+          "on-tertiary-fixed": "#00201f",
+          "on-background": "#e3e2e6",
+          "surface-bright": "#38393c",
+          "on-error": "#690005",
+          "surface-container-low": "#1b1b1f",
+          "on-tertiary-fixed-variant": "#00504e",
+          "surface-container-high": "#292a2d",
+          "on-primary": "#68000a",
+          "primary-fixed-dim": "#ffb3ad",
+          "on-primary-container": "#5c0008",
+          "surface-variant": "#343538",
+          "on-secondary-container": "#ffc8c1",
+          "surface-container-lowest": "#0d0e11",
+          "error-container": "#93000a",
+          "secondary-fixed-dim": "#ffb4ab",
+          "on-secondary": "#690005",
+          "on-primary-fixed": "#410004",
+          "surface-dim": "#121316",
+          "surface-container": "#1f1f23",
+          "inverse-surface": "#e3e2e6",
+          "tertiary-fixed-dim": "#69d8d4",
+          "background": "#121316",
+          "on-tertiary": "#003736",
+          "on-surface": "#e3e2e6",
+          "outline-variant": "#5b403e",
+          "tertiary": "#69d8d4",
+          "secondary-container": "#bb0112",
+          "on-surface-variant": "#e4beba",
+          "secondary": "#ffb4ab",
+          "primary-fixed": "#ffdad7",
+          "primary": "#ff5451",
+          "on-secondary-fixed-variant": "#93000b",
+          "inverse-primary": "#b91a24",
+          "outline": "#ab8986",
+          "on-error-container": "#ffdad6",
+          "on-tertiary-container": "#00302e",
+          "on-primary-fixed-variant": "#930013",
+          "error": "#ffb4ab"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-lg": "1.5rem",
+          "space-xl": "2rem",
+          "space-md": "1rem",
+          "margin": "1rem",
+          "space-xs": "0.25rem",
+          "gutter": "1rem",
+          "space-sm": "0.5rem"
+        },
+        "fontFamily": {
+          "body-lg": ["Inter"],
+          "body-sm": ["Inter"],
+          "headline-sm": ["Inter"],
+          "label-md": ["Inter"],
+          "label-lg": ["Inter"],
+          "headline-lg": ["Inter"],
+          "headline-lg-mobile": ["Inter"],
+          "body-md": ["Inter"],
+          "headline-md": ["Inter"],
+          "label-sm": ["Inter"]
+        },
+        "fontSize": {
+          "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+          "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+          "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+          "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "600" }],
+          "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+          "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }],
+          "headline-lg-mobile": ["26px", { "lineHeight": "34px", "fontWeight": "700" }],
+          "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+          "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "600" }],
+          "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }]
+        }
+      },
+    },
+  }
+</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-surface text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/90 backdrop-blur-xl border-b border-surface-container-high shadow-lg"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-xs min-w-0"><button aria-label="Kembali" class="w-11 h-11 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container-high active:bg-surface-container transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><div class="flex flex-col min-w-0"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Ekspor Dan Konversi Pdf</h1><span class="font-label-sm text-label-sm text-tertiary">Offline &amp; Aman</span></div></div><div class="flex items-center gap-space-xs flex-shrink-0"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-surface-container-lowest text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface px-margin"><div class="flex flex-col w-full pb-24 gap-space-md">
+<!-- Offline Guarantee Mini-Banner -->
+<div class="flex items-center justify-between bg-surface-container px-space-md py-space-sm rounded-lg border border-surface-container-high shadow-sm">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(105,216,212,0.6)]"></span>
+<span class="font-label-md text-label-md text-on-surface">100% Offline &amp; Terenkripsi Lokal</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary bg-tertiary/10 px-2.5 py-0.5 rounded-full font-medium">Siap Ekspor</span>
+</div>
+<!-- Interactive Document Preview (A4 Ratio Standard: 1:1.414) -->
+<div class="flex flex-col bg-surface-container rounded-xl border border-surface-container-high shadow-md p-space-md gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-label-lg text-label-lg text-on-surface">Pratinjau Dokumen</span>
+</div>
+<div class="flex items-center bg-surface-container-high px-2.5 py-1 rounded-full text-on-background/70">
+<span class="font-label-md text-label-md" id="page-counter-badge">Hal 1 dari 3</span>
+</div>
+</div>
+<!-- Page Swiper Viewport -->
+<div class="relative w-full overflow-hidden flex items-center justify-center bg-surface-container-lowest rounded-lg py-space-md border border-surface-container-high/60">
+<!-- Nav Button Left -->
+<button aria-label="Halaman Sebelumnya" class="absolute left-2 z-10 w-9 h-9 rounded-full bg-surface-container-high/90 text-on-surface flex items-center justify-center shadow-md active:scale-95 transition-transform disabled:opacity-30 border border-white/5" id="prev-page-btn">
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</button>
+<!-- Document Page Carrier -->
+<div class="w-52 aspect-[1/1.414] bg-white rounded-lg shadow-xl overflow-hidden relative transition-all duration-300 transform ring-1 ring-white/10" id="doc-card-container">
+<!-- Watermark Overlay (Controlled by toggle) -->
+<div class="hidden absolute inset-0 pointer-events-none items-center justify-center z-20" id="watermark-overlay">
+<span class="font-headline-sm text-headline-sm text-red-900/40 uppercase tracking-widest -rotate-45 select-none font-bold">CONFIDENTIAL</span>
+</div>
+<!-- Page Content 1 -->
+<div class="page-slide absolute inset-0 flex flex-col p-3.5 bg-white text-gray-900" id="page-slide-1">
+<div class="flex items-center justify-between pb-2 mb-2">
+<div class="h-3 w-16 bg-gray-200 rounded"></div>
+<div class="h-2 w-8 bg-gray-100 rounded"></div>
+</div>
+<div class="relative w-full h-28 rounded overflow-hidden mb-3">
+<img class="w-full h-full object-cover" data-alt="Scanned clean corporate contract invoice document crisp high contrast scan paper sheet texture with blue seal and signature in minimalist modern layout on crisp white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkpXCSFVqvhWBoOsBTivbnwuJ2hsgpIb3spCVjuccB8I2B53tCb0FBgkO8vMmX00AkJiizwNNBmNgNA0pUlxInrjbXToFKKFDLKgT-ykkOToIE6kmkCehgyYFa2g4YBsFyB0DDhOY2126ioQ-ptf7fZrau47RbWQYAAqv4S1NTvMu5HAJqwxHgoLNWTWqjv_SOi0Ranbq2NwGIWlwcjHapm_3IsebZASt3A5oJVQ"/>
+</div>
+<div class="space-y-1.5 flex-1">
+<div class="h-2 w-full bg-gray-200 rounded"></div>
+<div class="h-2 w-11/12 bg-gray-100 rounded"></div>
+<div class="h-2 w-4/5 bg-gray-100 rounded"></div>
+<div class="h-2 w-3/4 bg-gray-50 rounded"></div>
+</div>
+<div class="pt-2 flex justify-between items-center text-gray-500">
+<span class="font-label-sm text-label-sm">Hal. 1</span>
+<span class="font-label-sm text-label-sm">ISO A4</span>
+</div>
+</div>
+<!-- Page Content 2 -->
+<div class="page-slide hidden absolute inset-0 flex flex-col p-3.5 bg-white text-gray-900" id="page-slide-2">
+<div class="flex items-center justify-between pb-2 mb-2">
+<div class="h-3 w-20 bg-gray-200 rounded"></div>
+<div class="h-2 w-6 bg-gray-100 rounded"></div>
+</div>
+<div class="relative w-full h-28 rounded overflow-hidden mb-3">
+<img class="w-full h-full object-cover" data-alt="Official financial report scan table spreadsheet with neat columns numerical figures stamped seal crisp scanning clarity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBeFffwCEH1mZbk9hEy_H29WvADE8gED1q6x_QUWvVX9fJ10b2VbYzBe4XjT7fOP_BlvJIYGaZ0JJRQNJ1JCXCIzggq8NzcIwTtga84_h0zLXIlfr8zadhsvWp_ahqqMAo2b1UsYwnYx6lCHcyDp5JdKniJAX2wUdBk7g5BUdhbUMGDZg37n9FqzylLCUV_TQKdxXPNvgmUBM7op19PV1dMXwlMV2avPDE0ERxJA"/>
+</div>
+<div class="space-y-1.5 flex-1">
+<div class="h-2 w-full bg-gray-200 rounded"></div>
+<div class="h-2 w-5/6 bg-gray-100 rounded"></div>
+<div class="h-2 w-4/6 bg-gray-50 rounded"></div>
+</div>
+<div class="pt-2 flex justify-between items-center text-gray-500">
+<span class="font-label-sm text-label-sm">Hal. 2</span>
+<span class="font-label-sm text-label-sm">ISO A4</span>
+</div>
+</div>
+<!-- Page Content 3 -->
+<div class="page-slide hidden absolute inset-0 flex flex-col p-3.5 bg-white text-gray-900" id="page-slide-3">
+<div class="flex items-center justify-between pb-2 mb-2">
+<div class="h-3 w-14 bg-gray-200 rounded"></div>
+<div class="h-2 w-6 bg-gray-100 rounded"></div>
+</div>
+<div class="relative w-full h-28 rounded overflow-hidden mb-3">
+<img class="w-full h-full object-cover" data-alt="Signature endorsement agreement document scanned with black ink signature authentic formal validation stamp" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5mFN2AJyZUXaiS_67auvxaWs71EWfGLzYuuefvIdX9OlNxoDtMPvV4IIpNAssKwxefdHRwYSEOwtTaQ_LmZUwE_DWEjh68twHPV9n4k1HMl9j0WQfCWA7MzcfoQYZwvr9mOjMnDqDPJzqVUnycgkWYFvvmeb_HC_ME73V87bfe6J4YNIpoqm8iGTLJW9zh83qQaUXFxbpW6b4UHlBTCKa-qSzE3GNwMMyqIv1wg"/>
+</div>
+<div class="space-y-1.5 flex-1">
+<div class="h-2 w-full bg-gray-200 rounded"></div>
+<div class="h-2 w-2/3 bg-gray-100 rounded"></div>
+</div>
+<div class="pt-2 flex justify-between items-center text-gray-500">
+<span class="font-label-sm text-label-sm">Hal. 3</span>
+<span class="font-label-sm text-label-sm">ISO A4</span>
+</div>
+</div>
+</div>
+<!-- Nav Button Right -->
+<button aria-label="Halaman Berikutnya" class="absolute right-2 z-10 w-9 h-9 rounded-full bg-surface-container-high/90 text-on-surface flex items-center justify-center shadow-md active:scale-95 transition-transform border border-white/5" id="next-page-btn">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+</div>
+<!-- Dots Indicator -->
+<div class="flex items-center justify-center gap-1.5 pt-1">
+<span class="w-5 h-1.5 rounded-full bg-primary transition-all shadow-[0_0_6px_rgba(255,84,81,0.5)]" id="dot-1"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-surface-container-highest transition-all" id="dot-2"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-surface-container-highest transition-all" id="dot-3"></span>
+</div>
+</div>
+<!-- File Name Editable Card -->
+<div class="flex flex-col bg-surface-container rounded-xl border border-surface-container-high shadow-md p-space-md gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant/80 tracking-wider" for="pdf-filename">NAMA FILE PDF</label>
+<div class="flex items-center gap-space-xs bg-surface-container-low border border-surface-container-high px-space-sm py-1 rounded-lg focus-within:border-primary transition-colors">
+<span class="material-symbols-outlined text-primary text-[20px]">description</span>
+<input class="flex-1 bg-transparent py-2 font-body-md text-body-md text-on-surface focus:outline-none min-w-0 truncate placeholder-surface-bright" id="pdf-filename" type="text" value="Scan_Dokumen_20250518.pdf"/>
+<button aria-label="Edit Nama File" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface active:bg-surface-container-high" id="edit-filename-focus-btn">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</div>
+<!-- Quality & Compression Preset Cards -->
+<div class="flex flex-col bg-surface-container rounded-xl border border-surface-container-high shadow-md p-space-md gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-lg text-label-lg text-on-surface">Kualitas &amp; Kompresi Dokumen</span>
+<span class="font-label-sm text-label-sm bg-surface-container-high text-primary px-2.5 py-0.5 rounded-full font-semibold border border-primary/20" id="est-size-pill">~1.2 MB</span>
+</div>
+<div aria-label="Pilihan Kompresi Dokumen" class="grid grid-cols-1 gap-2" role="radiogroup">
+<!-- Option 1: Minimal -->
+<label class="quality-option cursor-pointer flex items-center justify-between p-3 rounded-lg bg-surface-container-low border border-surface-container-high hover:border-surface-variant active:scale-[0.99] transition-all" data-dpi="72" data-size="~400 KB">
+<div class="flex items-center gap-3">
+<input class="accent-primary w-4 h-4 bg-surface-container-highest border-outline" name="compression_preset" type="radio" value="minimal"/>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Ukuran Minimal</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant/70">72 DPI • Ringan untuk WhatsApp &amp; Chat</span>
+</div>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">~400 KB</span>
+</label>
+<!-- Option 2: Standard Recommended (Default Selected) -->
+<label class="quality-option cursor-pointer flex items-center justify-between p-3 rounded-lg bg-surface-container-high border-2 border-primary/60 shadow-sm active:scale-[0.99] transition-all" data-dpi="150" data-size="~1.2 MB">
+<div class="flex items-center gap-3">
+<input checked="" class="accent-primary w-4 h-4" name="compression_preset" type="radio" value="standard"/>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="font-label-lg text-label-lg text-on-surface font-semibold">Standar Rekomendasi</span>
+<span class="font-label-sm text-label-sm bg-tertiary-container text-white px-1.5 py-0.2 rounded-full font-medium">Optimal</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant/70">150 DPI • Seimbang untuk Arsip &amp; Email</span>
+</div>
+</div>
+<span class="font-label-md text-label-md text-primary font-semibold">~1.2 MB</span>
+</label>
+<!-- Option 3: High Print Quality -->
+<label class="quality-option cursor-pointer flex items-center justify-between p-3 rounded-lg bg-surface-container-low border border-surface-container-high hover:border-surface-variant active:scale-[0.99] transition-all" data-dpi="300" data-size="~3.8 MB">
+<div class="flex items-center gap-3">
+<input class="accent-primary w-4 h-4 bg-surface-container-highest border-outline" name="compression_preset" type="radio" value="high"/>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Kualitas Tinggi / Cetak</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant/70">300 DPI • Ketajaman Teks Ultra Presisi</span>
+</div>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">~3.8 MB</span>
+</label>
+</div>
+</div>
+<!-- Advanced Settings & Security -->
+<div class="flex flex-col bg-surface-container rounded-xl border border-surface-container-high shadow-md p-space-md gap-space-md">
+<span class="font-label-lg text-label-lg text-on-surface">Keamanan &amp; Tata Letak Dokumen</span>
+<!-- Password Protection Toggle -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">lock</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Proteksi Kata Sandi</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant/70">Enkripsi 128-bit AES lokal</span>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" id="password-toggle" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary shadow-inner"></div>
+</label>
+</div>
+<!-- Password Collapsible Input -->
+<div class="hidden flex flex-col gap-1 pt-2" id="password-input-wrapper">
+<div class="flex items-center gap-space-xs bg-surface-container-low border border-surface-container-high px-space-sm py-1 rounded-lg">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">key</span>
+<input class="flex-1 bg-transparent py-2 font-body-md text-body-md text-on-surface focus:outline-none min-w-0 placeholder-surface-bright" id="pdf-password-field" placeholder="Masukkan sandi PDF" type="password"/>
+<button aria-label="Lihat kata sandi" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface" id="toggle-pw-visibility" type="button">
+<span class="material-symbols-outlined text-[18px]" id="pw-visibility-icon">visibility</span>
+</button>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant/80 px-1">Penerima wajib memasukkan sandi ini untuk membuka berkas.</span>
+</div>
+</div>
+<!-- Watermark Toggle -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-space-xs">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">branding_watermark</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Sertakan Watermark / Tanda Air</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant/70">Teks diagonal 'CONFIDENTIAL'</span>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" id="watermark-toggle" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary shadow-inner"></div>
+</label>
+</div>
+<!-- Paper Size Segmented Selector -->
+<div class="flex flex-col gap-space-xs pt-1">
+<span class="font-label-md text-label-md text-on-surface-variant/80 tracking-wider">UKURAN KERTAS EKSPOR</span>
+<div class="grid grid-cols-3 gap-2 bg-surface-container-low border border-surface-container-high p-1 rounded-lg" role="tablist">
+<button aria-selected="true" class="paper-size-btn bg-surface-container-high text-primary shadow-sm py-2 rounded font-label-md text-label-md transition-all flex items-center justify-center gap-1 font-semibold" id="size-a4" role="tab">
+<span>A4</span>
+<span class="material-symbols-outlined text-[14px]">check</span>
+</button>
+<button aria-selected="false" class="paper-size-btn text-on-surface-variant hover:text-on-surface py-2 rounded font-label-md text-label-md transition-all flex items-center justify-center gap-1" id="size-letter" role="tab">
+<span>Letter</span>
+</button>
+<button aria-selected="false" class="paper-size-btn text-on-surface-variant hover:text-on-surface py-2 rounded font-label-md text-label-md transition-all flex items-center justify-center gap-1" id="size-legal" role="tab">
+<span>Legal</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Bottom Action Bar (Fixed Ergonomics within boundaries) -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur-md px-margin py-3 border-t border-surface-container-high shadow-[0_-4px_24px_rgba(0,0,0,0.5)] flex flex-col gap-2">
+<div class="flex items-center gap-2 max-w-md mx-auto w-full">
+<!-- Secondary: Save locally to device -->
+<button class="flex-1 h-14 bg-surface-container-high text-on-surface hover:bg-surface-variant active:scale-[0.98] transition-transform rounded-lg font-label-lg text-label-lg flex items-center justify-center gap-2 border border-surface-container-highest" id="btn-save-device">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span>Simpan Berkas</span>
+</button>
+<!-- Primary Action: Direct Share with QuickPDF Signature Accent -->
+<button class="flex-[1.4] h-14 bg-primary-container text-white rounded-lg font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-lg shadow-red-950/40 active:scale-[0.98] transition-transform font-semibold" id="btn-share-pdf">
+<span class="material-symbols-outlined text-[20px]">share</span>
+<span>Bagikan PDF</span>
+</button>
+</div>
+</div>
+<!-- Interactive Toast Notification -->
+<div class="fixed top-20 left-1/2 -translate-x-1/2 z-50 transform -translate-y-16 opacity-0 transition-all duration-300 pointer-events-none" id="export-toast">
+<div class="bg-surface-bright text-on-surface border border-surface-container-highest px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-tertiary text-[18px]">check_circle</span>
+<span id="toast-text">Dokumen berhasil disiapkan!</span>
+</div>
+</div>
+</div>
+<script>
+  (() => {
+    // Page Carousel Logic
+    let currentPage = 1;
+    const totalPages = 3;
+    const counterBadge = document.getElementById('page-counter-badge');
+    const prevBtn = document.getElementById('prev-page-btn');
+    const nextBtn = document.getElementById('next-page-btn');
+
+    function updatePage(pageIndex) {
+      currentPage = pageIndex;
+      counterBadge.textContent = `Hal ${currentPage} dari ${totalPages}`;
+      
+      // Update Slide visibility
+      for (let i = 1; i <= totalPages; i++) {
+        const slide = document.getElementById(`page-slide-${i}`);
+        const dot = document.getElementById(`dot-${i}`);
+        if (i === currentPage) {
+          slide.classList.remove('hidden');
+          dot.className = 'w-5 h-1.5 rounded-full bg-primary transition-all shadow-[0_0_6px_rgba(255,84,81,0.5)]';
+        } else {
+          slide.classList.add('hidden');
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-surface-container-highest transition-all';
+        }
+      }
+
+      prevBtn.disabled = currentPage === 1;
+      nextBtn.disabled = currentPage === totalPages;
+    }
+
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) updatePage(currentPage - 1);
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (currentPage < totalPages) updatePage(currentPage + 1);
+    });
+
+    updatePage(1);
+
+    // Edit Filename Focus
+    const editBtn = document.getElementById('edit-filename-focus-btn');
+    const filenameInput = document.getElementById('pdf-filename');
+    editBtn.addEventListener('click', () => {
+      filenameInput.focus();
+      filenameInput.select();
+    });
+
+    // Compression Preset Selector Logic
+    const qualityOptions = document.querySelectorAll('.quality-option');
+    const estSizePill = document.getElementById('est-size-pill');
+
+    qualityOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        qualityOptions.forEach(el => {
+          el.classList.remove('bg-surface-container-high', 'border-2', 'border-primary/60', 'shadow-sm');
+          el.classList.add('bg-surface-container-low', 'border', 'border-surface-container-high');
+          const title = el.querySelector('.font-label-lg');
+          if (title) title.classList.remove('font-semibold');
+        });
+        opt.classList.remove('bg-surface-container-low', 'border-surface-container-high');
+        opt.classList.add('bg-surface-container-high', 'border-2', 'border-primary/60', 'shadow-sm');
+        const title = opt.querySelector('.font-label-lg');
+        if (title) title.classList.add('font-semibold');
+        
+        const radio = opt.querySelector('input[type="radio"]');
+        if (radio) radio.checked = true;
+
+        const size = opt.getAttribute('data-size');
+        if (size && estSizePill) {
+          estSizePill.textContent = size;
+        }
+      });
+    });
+
+    // Password Protection Collapsible
+    const passwordToggle = document.getElementById('password-toggle');
+    const passwordInputWrapper = document.getElementById('password-input-wrapper');
+    const pwField = document.getElementById('pdf-password-field');
+    const togglePwVisibility = document.getElementById('toggle-pw-visibility');
+    const pwVisibilityIcon = document.getElementById('pw-visibility-icon');
+
+    passwordToggle.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        passwordInputWrapper.classList.remove('hidden');
+        pwField.focus();
+      } else {
+        passwordInputWrapper.classList.add('hidden');
+      }
+    });
+
+    togglePwVisibility.addEventListener('click', () => {
+      if (pwField.type === 'password') {
+        pwField.type = 'text';
+        pwVisibilityIcon.textContent = 'visibility_off';
+      } else {
+        pwField.type = 'password';
+        pwVisibilityIcon.textContent = 'visibility';
+      }
+    });
+
+    // Watermark Toggle Sync
+    const watermarkToggle = document.getElementById('watermark-toggle');
+    const watermarkOverlay = document.getElementById('watermark-overlay');
+
+    watermarkToggle.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        watermarkOverlay.classList.remove('hidden');
+        watermarkOverlay.classList.add('flex');
+      } else {
+        watermarkOverlay.classList.add('hidden');
+        watermarkOverlay.classList.remove('flex');
+      }
+    });
+
+    // Paper Size Selector Tabs
+    const paperButtons = document.querySelectorAll('.paper-size-btn');
+    paperButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        paperButtons.forEach(b => {
+          b.className = 'paper-size-btn text-on-surface-variant hover:text-on-surface py-2 rounded font-label-md text-label-md transition-all flex items-center justify-center gap-1';
+          b.setAttribute('aria-selected', 'false');
+          const check = b.querySelector('.material-symbols-outlined');
+          if (check) check.remove();
+        });
+
+        btn.className = 'paper-size-btn bg-surface-container-high text-primary shadow-sm py-2 rounded font-label-md text-label-md transition-all flex items-center justify-center gap-1 font-semibold';
+        btn.setAttribute('aria-selected', 'true');
+        btn.insertAdjacentHTML('beforeend', '<span class="material-symbols-outlined text-[14px]">check</span>');
+      });
+    });
+
+    // Toast Notifications for Action Triggers
+    const toast = document.getElementById('export-toast');
+    const toastText = document.getElementById('toast-text');
+    let toastTimeout;
+
+    function showToast(message) {
+      clearTimeout(toastTimeout);
+      toastText.textContent = message;
+      toast.classList.remove('-translate-y-16', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('-translate-y-16', 'opacity-0');
+      }, 2500);
+    }
+
+    document.getElementById('btn-save-device').addEventListener('click', () => {
+      const filename = filenameInput.value || 'Dokumen.pdf';
+      showToast(`Menyimpan "${filename}" ke folder Unduhan...`);
+    });
+
+    document.getElementById('btn-share-pdf').addEventListener('click', () => {
+      showToast(`Membuka opsi bagikan untuk ${filenameInput.value}...`);
+    });
+  })();
+</script></main></body></html>

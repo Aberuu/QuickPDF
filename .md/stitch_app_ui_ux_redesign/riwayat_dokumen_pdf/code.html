@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="id"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"secondary-fixed":"#ffdad6","surface-tint":"#ffb3ad","surface":"#121316","tertiary-fixed":"#87f4f0","surface-container-highest":"#343538","tertiary-container":"#24a09d","inverse-on-surface":"#2f3034","on-secondary-fixed":"#410002","primary-container":"#ff5451","on-tertiary-fixed":"#00201f","on-background":"#e3e2e6","surface-bright":"#38393c","on-error":"#690005","surface-container-low":"#1b1b1f","on-tertiary-fixed-variant":"#00504e","surface-container-high":"#292a2d","on-primary":"#68000a","primary-fixed-dim":"#ffb3ad","on-primary-container":"#5c0008","surface-variant":"#343538","on-secondary-container":"#ffc8c1","surface-container-lowest":"#0d0e11","error-container":"#93000a","secondary-fixed-dim":"#ffb4ab","on-secondary":"#690005","on-primary-fixed":"#410004","surface-dim":"#121316","surface-container":"#1f1f23","inverse-surface":"#e3e2e6","tertiary-fixed-dim":"#69d8d4","background":"#121316","on-tertiary":"#003736","on-surface":"#e3e2e6","outline-variant":"#5b403e","tertiary":"#69d8d4","secondary-container":"#bb0112","on-surface-variant":"#e4beba","secondary":"#ffb4ab","primary-fixed":"#ffdad7","primary":"#ffb3ad","on-secondary-fixed-variant":"#93000b","inverse-primary":"#b91a24","outline":"#ab8986","on-error-container":"#ffdad6","on-tertiary-container":"#00302e","on-primary-fixed-variant":"#930013","error":"#ffb4ab"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-lg":"1.5rem","space-xl":"2rem","space-md":"1rem","margin":"1rem","space-xs":"0.25rem","gutter":"1rem","space-sm":"0.5rem"},"fontFamily":{"body-lg":["Inter"],"body-sm":["Inter"],"headline-sm":["Inter"],"label-md":["Inter"],"label-lg":["Inter"],"headline-lg":["Inter"],"headline-lg-mobile":["Inter"],"body-md":["Inter"],"headline-md":["Inter"],"label-sm":["Inter"]},"fontSize":{"body-lg":["16px",{"lineHeight":"24px","fontWeight":"400"}],"body-sm":["12px",{"lineHeight":"16px","fontWeight":"400"}],"headline-sm":["18px",{"lineHeight":"24px","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","fontWeight":"600"}],"label-lg":["14px",{"lineHeight":"20px","fontWeight":"600"}],"headline-lg":["32px",{"lineHeight":"40px","fontWeight":"700"}],"headline-lg-mobile":["26px",{"lineHeight":"34px","fontWeight":"700"}],"body-md":["14px",{"lineHeight":"20px","fontWeight":"400"}],"headline-md":["22px",{"lineHeight":"28px","fontWeight":"600"}],"label-sm":["11px",{"lineHeight":"14px","fontWeight":"500"}]}}}};</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-background text-on-surface flex flex-col min-h-screen selection:bg-primary-container selection:text-white"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/90 backdrop-blur-xl border-b border-surface-container-high/60 shadow-[0_1px_12px_rgba(0,0,0,0.4)]"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><img alt="QuickPDF Logo" class="h-8 w-auto object-contain flex-shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBoUOeTqmfXzBUu4MI4G1YifpMpbnxkZBWux9Y2wdU_7qZ5de0jwbrgqpM5aYv_Xlr9i4k_gxmRIUWU02sYr9bj8vsRoQdfUdCEWt5njAJQzKCRhJW8Nwc2igicdNt_Y9DD4H2yBUs7sQPABqq562rf7yd51-j6jQGPY011oFQ7YhMdBduxiAD-rv0NLcrTR_sj9rUM0ZZz0_k14pgceDqKMw8l5-d-gZEhmHEiGg"/><div class="flex flex-col min-w-0"><div class="flex items-center gap-space-xs"><span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">QuickPDF</span><span class="font-body-sm text-body-sm text-on-surface-variant/80 hidden sm:inline">• Riwayat Pdf</span></div><div class="flex items-center gap-1.5 bg-surface-container-low/90 border border-surface-container-high px-2 py-0.5 rounded-full w-fit"><span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span><span class="font-label-sm text-label-sm text-tertiary font-medium">100% Offline • Lokal di Perangkat</span></div></div></div><div class="flex items-center gap-space-xs flex-shrink-0"><a aria-label="Pengaturan Aplikasi" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" data-path="settings" href="#"><span class="material-symbols-outlined text-[22px]">settings</span></a><div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0 text-white font-semibold"><span class="material-symbols-outlined text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-28 bg-background px-margin"><div class="flex flex-col w-full pb-6 space-y-4">
+<div class="flex flex-col gap-2.5 pt-2">
+<div class="relative flex items-center w-full">
+<span class="material-symbols-outlined absolute left-3.5 text-on-surface-variant text-[20px] pointer-events-none">search</span>
+<input class="w-full h-12 pl-11 pr-11 bg-surface-container-low text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-on-surface-variant/70 focus:outline-none focus:border-primary-container focus:bg-surface-container transition-all shadow-inner" id="pdf-search-input" placeholder="Cari dokumen PDF..." type="text"/>
+<button aria-label="Bersihkan pencarian" class="absolute right-3 w-7 h-7 hidden items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant active:scale-95 transition-transform" id="clear-search-btn" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 -mx-margin px-margin">
+<button class="filter-chip px-3.5 py-1.5 rounded-full bg-primary-container text-white font-label-md text-label-md flex items-center gap-1.5 shadow-[0_0_12px_rgba(255,84,81,0.35)] shrink-0 active:scale-95 transition-all" data-filter="all">
+<span>Semua</span>
+<span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+</button>
+<button class="filter-chip px-3.5 py-1.5 rounded-full bg-surface-container-low border border-surface-container-high text-on-surface font-label-md text-label-md shrink-0 active:scale-95 transition-transform hover:bg-surface-container" data-filter="ujian">
+        Tugas / Ujian
+      </button>
+<button class="filter-chip px-3.5 py-1.5 rounded-full bg-surface-container-low border border-surface-container-high text-on-surface font-label-md text-label-md shrink-0 active:scale-95 transition-transform hover:bg-surface-container" data-filter="kantor">
+        Kantor
+      </button>
+<button class="filter-chip px-3.5 py-1.5 rounded-full bg-surface-container-low border border-surface-container-high text-on-surface font-label-md text-label-md shrink-0 active:scale-95 transition-transform hover:bg-surface-container" data-filter="keuangan">
+        Tagihan &amp; Keuangan
+      </button>
+</div>
+</div>
+<div class="bg-surface-container-low border border-surface-container-high/70 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[22px]">phone_android</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="font-label-md text-label-md text-on-surface">Penyimpanan Offline</span>
+<span class="px-1.5 py-0.5 rounded-full bg-tertiary/20 text-tertiary border border-tertiary/30 font-label-sm text-label-sm">Aman</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">
+          12 Dokumen • 48.2 MB Terpakai di HP
+        </p>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<button aria-label="Urutkan dokumen" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[18px]">swap_vert</span>
+</button>
+<button aria-label="Kelola penyimpanan" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[18px]">cleaning_services</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Dokumen Tersimpan</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container border border-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-bold" id="visible-count">3 Berkas</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+<span>Tersinkron Lokal</span>
+</div>
+</div>
+<div class="flex flex-col space-y-3" id="pdf-list-container">
+<div class="pdf-card group relative bg-surface-container-low border border-surface-container-high/80 rounded-xl p-3 shadow-sm hover:border-surface-container-highest transition-all active:scale-[0.99] flex flex-col gap-2.5 overflow-hidden" data-category="ujian" data-title="lembar jawaban ujian akhir">
+<div class="flex items-center gap-3">
+<div class="relative w-14 h-18 bg-surface-container-highest rounded-lg overflow-hidden shrink-0 shadow-sm flex items-center justify-center ring-1 ring-white/10">
+<img class="w-full h-full object-cover brightness-90 group-hover:brightness-100 transition-all" data-alt="Close up of a neatly aligned examination paper with printed text, hand signatures, stamp seals, and clean crisp paper margin inside an academic test context with high sharpness" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEmO-rIJ838lQjO1Oklhy7nsu6mQQh_YvOZxvNqrjnaoHGxkKM-cxbPGfPeb4_hnSoCe-0KydwozgVwsVfUxbzbVnX9s9lEpJTrsmq0yzekqNkTKConupCPMS7tWTDtEvL7IUsFQkJdDW2DstDAyrCIYVymkBu91r9sqt9yn1Su7uIrZWpmHJuN_Yw9TwOQRIhS9nuzYIFl0wWzLknxCRfN5NNAUeHB0n3cI0CwQ"/>
+<span class="absolute bottom-1 right-1 bg-surface-container-lowest/90 backdrop-blur-xs text-on-surface text-[9px] font-label-sm px-1 py-0.2 rounded font-bold ring-1 ring-white/10">4 Hal</span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="px-2 py-0.5 rounded-md bg-secondary-container/40 border border-secondary-container/70 text-secondary font-label-sm text-label-sm font-semibold">Ujian</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Hari ini, 10:45</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight font-semibold">
+            Lembar_Jawaban_Ujian_Akhir.pdf
+          </h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant/90 mt-0.5">
+            2.4 MB • Resolusi Tinggi • OCR Siap
+          </p>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<button aria-label="Bagikan Dokumen" class="w-9 h-9 rounded-full bg-surface-container border border-surface-container-high text-on-surface flex items-center justify-center hover:bg-primary-container hover:text-white active:scale-90 transition-all shadow-sm">
+<span class="material-symbols-outlined text-[19px]">share</span>
+</button>
+<button aria-label="Menu Dokumen" class="menu-btn w-9 h-9 rounded-full bg-surface-container border border-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center hover:bg-surface-container-highest active:scale-90 transition-all">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-surface-container-high/40">
+<div class="flex items-center gap-1 text-tertiary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+<span>Tersimpan di Penyimpanan Privat</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded-lg bg-surface-container border border-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">visibility</span>
+<span>Pratinjau</span>
+</button>
+</div>
+</div>
+</div>
+<div class="pdf-card group relative bg-surface-container-low border border-surface-container-high/80 rounded-xl p-3 shadow-sm hover:border-surface-container-highest transition-all active:scale-[0.99] flex flex-col gap-2.5 overflow-hidden" data-category="keuangan" data-title="kuitansi pembayaran sewa mei">
+<div class="flex items-center gap-3">
+<div class="relative w-14 h-18 bg-surface-container-highest rounded-lg overflow-hidden shrink-0 shadow-sm flex items-center justify-center ring-1 ring-white/10">
+<img class="w-full h-full object-cover brightness-90 group-hover:brightness-100 transition-all" data-alt="Digital scan receipt of monthly rental payment receipt showing paid watermark, official invoice header, and clean bold numerical values on crisp paper" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXgGF33Sb7zr997ViiUNelEiDXArka_31nmnUAhwVgVqduvMsit5sGdg_tT2E6dnUeWyJUP_N18zAHE3RD4qYhM63J9rYHsdjQmo61kq5MDKX2WCbuAvmchsYMixSgAcO6zTkORA5LUlSnXYn8oyeU5wPPypYpbYeulDdutY1TgrS5ObQb1RNnHnKlU3u5dalqoWV6lWK_7dqy8Qa_yTErqw4dXTi0w3PA_pVtuw"/>
+<span class="absolute bottom-1 right-1 bg-surface-container-lowest/90 backdrop-blur-xs text-on-surface text-[9px] font-label-sm px-1 py-0.2 rounded font-bold ring-1 ring-white/10">1 Hal</span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="px-2 py-0.5 rounded-md bg-tertiary/20 border border-tertiary/40 text-tertiary font-label-sm text-label-sm font-semibold">Keuangan</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Kemarin</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight font-semibold">
+            Kuitansi_Pembayaran_Sewa_Mei.pdf
+          </h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant/90 mt-0.5">
+            850 KB • Mode Dokumen Ringan
+          </p>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<button aria-label="Bagikan Dokumen" class="w-9 h-9 rounded-full bg-surface-container border border-surface-container-high text-on-surface flex items-center justify-center hover:bg-primary-container hover:text-white active:scale-90 transition-all shadow-sm">
+<span class="material-symbols-outlined text-[19px]">share</span>
+</button>
+<button aria-label="Menu Dokumen" class="menu-btn w-9 h-9 rounded-full bg-surface-container border border-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center hover:bg-surface-container-highest active:scale-90 transition-all">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-surface-container-high/40">
+<div class="flex items-center gap-1 text-tertiary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">offline_pin</span>
+<span>100% Offline</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded-lg bg-surface-container border border-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">visibility</span>
+<span>Pratinjau</span>
+</button>
+</div>
+</div>
+</div>
+<div class="pdf-card group relative bg-surface-container-low border border-surface-container-high/80 rounded-xl p-3 shadow-sm hover:border-surface-container-highest transition-all active:scale-[0.99] flex flex-col gap-2.5 overflow-hidden" data-category="kantor" data-title="kontrak kerja freelance 2025">
+<div class="flex items-center gap-3">
+<div class="relative w-14 h-18 bg-surface-container-highest rounded-lg overflow-hidden shrink-0 shadow-sm flex items-center justify-center ring-1 ring-white/10">
+<img class="w-full h-full object-cover brightness-90 group-hover:brightness-100 transition-all" data-alt="Legal business employment contract document showing formal headers, structured legal paragraphs, and official signature section scanned clearly in black and white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAveyPHzJChbhZ20XToCl8xCmuqBWM4uj45kugqC5-8RYIKUEUkkZW26xay9kMDJ5M9GCJ7ikKOV2UhO7GsuZSEDVprWqw7d6QvKMPpwhMgoVYFjT9Pb5sFJIRdUzGRLnMYnYYXhAR1WFq6mN7fw2ypTKsNJH-B7GMhiEGRL0dybYDkBQskiipQZNcbGrO89lNN6WolkYNEkqn5BEBBnGeO7rLphA0IbS9Cq6UpJQ"/>
+<span class="absolute bottom-1 right-1 bg-surface-container-lowest/90 backdrop-blur-xs text-on-surface text-[9px] font-label-sm px-1 py-0.2 rounded font-bold ring-1 ring-white/10">8 Hal</span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="px-2 py-0.5 rounded-md bg-surface-container-highest border border-outline-variant/60 text-primary-fixed-dim font-label-sm text-label-sm font-semibold">Kantor</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">2 Mei 2025</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight font-semibold">
+            Kontrak_Kerja_Freelance_2025.pdf
+          </h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant/90 mt-0.5">
+            5.1 MB • Kompresi Optimal
+          </p>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<button aria-label="Bagikan Dokumen" class="w-9 h-9 rounded-full bg-surface-container border border-surface-container-high text-on-surface flex items-center justify-center hover:bg-primary-container hover:text-white active:scale-90 transition-all shadow-sm">
+<span class="material-symbols-outlined text-[19px]">share</span>
+</button>
+<button aria-label="Menu Dokumen" class="menu-btn w-9 h-9 rounded-full bg-surface-container border border-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center hover:bg-surface-container-highest active:scale-90 transition-all">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-surface-container-high/40">
+<div class="flex items-center gap-1 text-tertiary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">offline_pin</span>
+<span>100% Offline</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded-lg bg-surface-container border border-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">visibility</span>
+<span>Pratinjau</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="hidden flex-col items-center justify-center text-center p-8 bg-surface-container-low border border-surface-container-high rounded-2xl my-2" id="empty-state">
+<div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant mb-3">
+<span class="material-symbols-outlined text-[32px]">folder_off</span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Dokumen Tidak Ditemukan</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-xs mt-1 mb-4">
+      Tidak ada arsip PDF yang sesuai dengan kata kunci atau filter yang Anda pilih.
+    </p>
+<button class="px-4 py-2 rounded-xl bg-primary-container text-white font-label-md text-label-md active:scale-95 transition-transform shadow-md" id="reset-filter-btn">
+      Kembalikan Semua Berkas
+    </button>
+</div>
+<div class="bg-surface-container-low border border-surface-container-high rounded-2xl p-4 flex items-center gap-3.5 shadow-sm mt-2">
+<div class="w-12 h-12 rounded-xl bg-tertiary/15 border border-tertiary/30 text-tertiary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[26px]">security</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-lg text-label-lg text-on-surface font-semibold">Privasi Berkas Mutlak</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Seluruh arsip tersimpan langsung di folder aplikasi ponsel Anda tanpa unggahan server.
+      </p>
+</div>
+</div>
+<div aria-modal="true" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-end justify-center transition-opacity" id="action-modal" role="dialog">
+<div class="w-full max-w-lg bg-surface-container border-t border-surface-container-high rounded-t-2xl p-5 shadow-2xl flex flex-col space-y-4 animate-in slide-in-from-bottom duration-200">
+<div class="w-10 h-1 rounded-full bg-surface-bright mx-auto mb-1"></div>
+<div class="flex items-center justify-between">
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate" id="modal-doc-title">Nama Dokumen</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Kelola Berkas PDF Lokal</span>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center active:scale-90" id="close-modal-btn">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="grid grid-cols-1 gap-2 pt-2">
+<button class="w-full h-12 px-4 rounded-xl bg-surface-container-low border border-surface-container-high text-on-surface font-label-lg text-label-lg flex items-center gap-3 hover:bg-surface-container-high active:scale-98 transition-all">
+<span class="material-symbols-outlined text-[22px] text-on-surface-variant">print</span>
+<span>Cetak Dokumen (Print)</span>
+</button>
+<button class="w-full h-12 px-4 rounded-xl bg-surface-container-low border border-surface-container-high text-on-surface font-label-lg text-label-lg flex items-center gap-3 hover:bg-surface-container-high active:scale-98 transition-all">
+<span class="material-symbols-outlined text-[22px] text-on-surface-variant">drive_file_rename_outline</span>
+<span>Ganti Nama Berkas</span>
+</button>
+<button class="w-full h-12 px-4 rounded-xl bg-surface-container-low border border-surface-container-high text-on-surface font-label-lg text-label-lg flex items-center gap-3 hover:bg-surface-container-high active:scale-98 transition-all">
+<span class="material-symbols-outlined text-[22px] text-on-surface-variant">compress</span>
+<span>Kompres Ukuran PDF</span>
+</button>
+<button class="w-full h-12 px-4 rounded-xl bg-error-container/50 border border-error/30 text-error font-label-lg text-label-lg flex items-center gap-3 hover:bg-error-container/70 active:scale-98 transition-all">
+<span class="material-symbols-outlined text-[22px] text-error">delete</span>
+<span>Hapus dari Memori HP</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const searchInput = document.getElementById('pdf-search-input');
+    const clearBtn = document.getElementById('clear-search-btn');
+    const chips = document.querySelectorAll('.filter-chip');
+    const cards = document.querySelectorAll('.pdf-card');
+    const emptyState = document.getElementById('empty-state');
+    const countBadge = document.getElementById('visible-count');
+    const resetBtn = document.getElementById('reset-filter-btn');
+
+    const modal = document.getElementById('action-modal');
+    const modalTitle = document.getElementById('modal-doc-title');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const menuButtons = document.querySelectorAll('.menu-btn');
+
+    let currentFilter = 'all';
+
+    function filterDocs() {
+      const query = (searchInput.value || '').trim().toLowerCase();
+      let matchCount = 0;
+
+      cards.forEach(card => {
+        const title = card.getAttribute('data-title') || '';
+        const cat = card.getAttribute('data-category') || '';
+        
+        const matchesCategory = (currentFilter === 'all' || cat === currentFilter);
+        const matchesSearch = title.includes(query);
+
+        if (matchesCategory && matchesSearch) {
+          card.classList.remove('hidden');
+          matchCount++;
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+
+      countBadge.textContent = matchCount + ' Berkas';
+
+      if (matchCount === 0) {
+        emptyState.classList.remove('hidden');
+        emptyState.classList.add('flex');
+      } else {
+        emptyState.classList.add('hidden');
+        emptyState.classList.remove('flex');
+      }
+    }
+
+    searchInput.addEventListener('input', () => {
+      if (searchInput.value.length > 0) {
+        clearBtn.classList.remove('hidden');
+        clearBtn.classList.add('flex');
+      } else {
+        clearBtn.classList.add('hidden');
+        clearBtn.classList.remove('flex');
+      }
+      filterDocs();
+    });
+
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.classList.add('hidden');
+      clearBtn.classList.remove('flex');
+      searchInput.focus();
+      filterDocs();
+    });
+
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        chips.forEach(c => {
+          c.classList.remove('bg-primary-container', 'text-white', 'shadow-[0_0_12px_rgba(255,84,81,0.35)]');
+          c.classList.add('bg-surface-container-low', 'text-on-surface');
+        });
+
+        chip.classList.add('bg-primary-container', 'text-white', 'shadow-[0_0_12px_rgba(255,84,81,0.35)]');
+        chip.classList.remove('bg-surface-container-low', 'text-on-surface');
+
+        currentFilter = chip.getAttribute('data-filter');
+        filterDocs();
+      });
+    });
+
+    resetBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.classList.add('hidden');
+      clearBtn.classList.remove('flex');
+      currentFilter = 'all';
+      chips.forEach((c, idx) => {
+        if (idx === 0) {
+          c.classList.add('bg-primary-container', 'text-white', 'shadow-[0_0_12px_rgba(255,84,81,0.35)]');
+          c.classList.remove('bg-surface-container-low', 'text-on-surface');
+        } else {
+          c.classList.remove('bg-primary-container', 'text-white', 'shadow-[0_0_12px_rgba(255,84,81,0.35)]');
+          c.classList.add('bg-surface-container-low', 'text-on-surface');
+        }
+      });
+      filterDocs();
+    });
+
+    menuButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const card = btn.closest('.pdf-card');
+        const titleEl = card.querySelector('h3');
+        modalTitle.textContent = titleEl ? titleEl.textContent.trim() : 'Dokumen PDF';
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      });
+    });
+
+    closeModalBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    });
+  })();
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl border-t border-surface-container-high/60 shadow-[0_-2px_16px_rgba(0,0,0,0.5)]"><div class="h-20 px-margin flex items-center justify-around relative"><a class="flex flex-col items-center justify-center gap-1 w-20 h-14 text-on-surface-variant hover:text-on-surface transition-colors relative" data-path="meja-kerja" href="#"><div class="relative flex items-center justify-center"><span class="material-symbols-outlined text-[24px]">grid_view</span><span class="absolute -top-1 -right-2 px-1.5 py-0.2 rounded-full bg-primary-container text-white font-label-sm text-label-sm leading-tight min-w-[16px] text-center font-bold shadow-sm">3</span></div><span class="font-label-md text-label-md truncate">Meja Kerja</span></a><div class="relative -top-5 flex flex-col items-center"><a aria-label="Pindai Dokumen Cepat" class="w-16 h-16 rounded-full bg-primary-container hover:bg-primary-container/90 text-white flex items-center justify-center shadow-lg shadow-primary-container/40 ring-4 ring-surface active:scale-95 transition-transform" data-path="auto-scan" href="#"><span class="material-symbols-outlined text-[30px]">document_scanner</span></a><span class="font-label-sm text-label-sm text-on-surface-variant mt-1.5 font-semibold">Auto-Scan</span></div><a aria-current="page" class="flex flex-col items-center justify-center gap-1 w-20 h-14 transition-colors text-primary font-bold" data-path="riwayat-pdf" href="#"><span class="material-symbols-outlined text-[24px]">folder_copy</span><span class="font-label-md text-label-md truncate">Riwayat PDF</span></a></div></nav></body></html>
