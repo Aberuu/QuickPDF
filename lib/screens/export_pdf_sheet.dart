@@ -127,9 +127,9 @@ class _ExportPdfSheetState extends State<ExportPdfSheet> {
         quality: _quality,
         actionType: actionType,
         includeWatermark: _includeWatermark,
-        watermarkText: _watermarkController.text.trim().isEmpty
-            ? 'CONFIDENTIAL'
-            : _watermarkController.text.trim().toUpperCase(),
+        watermarkText: PdfGeneratorService.sanitizeWatermarkText(
+          _watermarkController.text,
+        ),
         isPasswordProtected: _isPasswordProtected,
         password: _isPasswordProtected ? _passwordController.text.trim() : null,
       ),
@@ -504,11 +504,10 @@ class _ExportPdfSheetState extends State<ExportPdfSheet> {
                                                     borderRadius: BorderRadius.circular(3),
                                                   ),
                                                   child: Text(
-                                                    _watermarkController.text.trim().isEmpty
-                                                        ? 'CONFIDENTIAL'
-                                                        : _watermarkController.text
-                                                            .trim()
-                                                            .toUpperCase(),
+                                                    PdfGeneratorService
+                                                        .sanitizeWatermarkText(
+                                                      _watermarkController.text,
+                                                    ),
                                                     style: TextStyle(
                                                       color: const Color(0xFFB91C1C)
                                                           .withValues(alpha: 0.50),
@@ -877,7 +876,7 @@ class _ExportPdfSheetState extends State<ExportPdfSheet> {
                                           ),
                                         ),
                                         Text(
-                                          "Teks diagonal '${_watermarkController.text.trim().isEmpty ? 'CONFIDENTIAL' : _watermarkController.text.trim().toUpperCase()}'",
+                                          "Teks diagonal '${PdfGeneratorService.sanitizeWatermarkText(_watermarkController.text)}'",
                                           style: TextStyle(
                                             fontSize: 11.5,
                                             color: theme.textTheme.bodySmall?.color,

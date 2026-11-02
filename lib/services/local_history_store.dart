@@ -15,6 +15,11 @@ class LocalHistoryStore {
 
   static final Map<String, Uint8List> _sessionPdfCache = <String, Uint8List>{};
 
+  static void clearSessionCacheForTesting() {
+    _sessionPdfCache.clear();
+  }
+
+
   static Future<List<PdfHistoryEntry>> loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final rawList = prefs.getStringList(_historyKey) ?? const [];

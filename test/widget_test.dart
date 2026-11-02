@@ -422,6 +422,20 @@ void main() {
       findsOneWidget,
     );
 
+    // Klik Bersihkan lalu Urungkan untuk memastikan halaman kembali utuh
+    final bersihkanBtn = find.text('Bersihkan');
+    await tester.ensureVisible(bersihkanBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(bersihkanBtn);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('3 halaman dibersihkan dari Meja Kerja.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Urungkan'));
+    await tester.pumpAndSettle();
+    expect(find.text('3 Hal Siap'), findsOneWidget);
+
     // 4. Verifikasi Layar 3 (Detail & Ekspor PDF): Carousel A4, DPI 3-Tier, Watermark, & Proteksi Sandi
     await tester.tap(find.text('Buat PDF (3)'));
     await tester.pumpAndSettle();
@@ -441,13 +455,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(watermarkSwitch);
     await tester.pumpAndSettle();
-    expect(
-      find.widgetWithText(
-        TextField,
-        'Teks Watermark (misal: CONFIDENTIAL / SALINAN)',
-      ),
-      findsOneWidget,
+    final watermarkField = find.widgetWithText(
+      TextField,
+      'Teks Watermark (misal: CONFIDENTIAL / SALINAN)',
     );
+    expect(watermarkField, findsOneWidget);
+    await tester.ensureVisible(watermarkField);
+    await tester.pumpAndSettle();
+    await tester.enterText(watermarkField, 'CONFIDENTIAL \u2014 UJIAN\u2122');
+    await tester.pumpAndSettle();
+    expect(find.text('CONFIDENTIAL UJIAN'), findsOneWidget);
 
     final passwordSwitch = find.text('Proteksi Kata Sandi');
     await tester.ensureVisible(passwordSwitch);
@@ -533,8 +550,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Mode Dokumen Ringan'), findsWidgets);
 
-    // Uji dialog verifikasi kata sandi saat membuka dokumen terkunci dengan sandi salah
-    await tester.tap(find.byTooltip('Buka & Baca PDF').first);
+    // Uji mengetuk judul kartu dokumen langsung memicu dialog verifikasi kata sandi
+    await tester.tap(find.text('Kuitansi_Kos_Mei.pdf'));
     await tester.pumpAndSettle();
     expect(find.text('Dokumen Terkunci Sandi'), findsOneWidget);
 
@@ -551,7 +568,7 @@ void main() {
   });
 
   test(
-      'LocalHistoryStore preserves >4MB PDF bytes in session cache and PdfGeneratorService.recompressHistoryEntry reduces size',
+      'LocalHistoryStore preserves >4MB PDF bytes in session cache and multi-page cold-restart recompression preserves distinct pages, landscape rotation, and DPI resolution',
       () async {
     SharedPreferences.setMockInitialValues({});
 
@@ -579,19 +596,43 @@ void main() {
     expect(resolvedBytes, isNotNull);
     expect(resolvedBytes!.lengthInBytes, equals(largeBytes.lengthInBytes));
 
-    // 2. Uji recompressHistoryEntry dari High (300 DPI) ke Low (72 DPI)
-    final sampleSheet =
+    // 2. Uji multi-page recompressHistoryEntry pasca-restart (cold restart tanpa session cache)
+    final sheet0 =
         SmartScannerService.generateSampleSheetBytes(templateIndex: 0);
+    final sheet1 =
+        SmartScannerService.generateSampleSheetBytes(templateIndex: 1);
+    final sheet2 =
+        SmartScannerService.generateSampleSheetBytes(templateIndex: 2);
+
     final highResGen = await PdfGeneratorService.buildPdfDocument(
       pages: [
         ScannedPageItem(
           id: 'recompress_p1',
-          sourceLabel: 'Hal 1',
-          originalBytes: sampleSheet,
-          displayBytes: sampleSheet,
+          sourceLabel: 'Hal 1 Portrait',
+          originalBytes: sheet0,
+          displayBytes: sheet0,
+          width: 900,
+          height: 1200,
+        ),
+        ScannedPageItem(
+          id: 'recompress_p2',
+          sourceLabel: 'Hal 2 Landscape',
+          originalBytes: sheet1,
+          displayBytes: sheet1,
+          rotationQuarterTurns: 1,
+          width: 900,
+          height: 1200,
+        ),
+        ScannedPageItem(
+          id: 'recompress_p3',
+          sourceLabel: 'Hal 3 Portrait',
+          originalBytes: sheet2,
+          displayBytes: sheet2,
+          width: 900,
+          height: 1200,
         ),
       ],
-      rawFileName: 'Uji_Kompres_Res',
+      rawFileName: 'Uji_Kompres_Multipage',
       paperSize: PaperSizeOption.a4,
       marginOption: PageMarginOption.small,
       qualityPreset: QualityPreset.high,
@@ -600,8 +641,24 @@ void main() {
       saveToDevice: false,
     );
 
+    expect(
+      highResGen.historyEntry.watermarkText,
+      equals('CONFIDENTIAL UJIAN'),
+    );
+
+    await LocalHistoryStore.addHistoryEntry(highResGen.historyEntry);
+
+    // Simulasikan cold-restart aplikasi: bersihkan seluruh cache memori
+    PdfGeneratorService.clearSessionCacheForTesting();
+    LocalHistoryStore.clearSessionCacheForTesting();
+
+    final reloadedEntries = await LocalHistoryStore.loadHistory();
+    final coldEntry = reloadedEntries.firstWhere(
+      (e) => e.id == highResGen.historyEntry.id,
+    );
+
     final lowResEntry = await PdfGeneratorService.recompressHistoryEntry(
-      entry: highResGen.historyEntry,
+      entry: coldEntry,
       targetQuality: QualityPreset.low,
     );
 
@@ -610,6 +667,35 @@ void main() {
       lowResEntry.fileSizeBytes,
       lessThan(highResGen.historyEntry.fileSizeBytes),
     );
+
+    // Pastikan ke-3 halaman tetap utuh, berbeda satu sama lain, mempertahankan orientasi, dan beresolusi dokumen penuh (840px, bukan thumbnail 180px)
+    final extractedJpegs =
+        PdfGeneratorService.extractEmbeddedJpegsFromPdf(lowResEntry.pdfBytes!);
+    expect(extractedJpegs, hasLength(3));
+    expect(extractedJpegs[0], isNot(equals(extractedJpegs[1])));
+    expect(extractedJpegs[1], isNot(equals(extractedJpegs[2])));
+
+    final meta0 = SmartScannerService.compressForHistoryRecompressWithMeta(
+      extractedJpegs[0],
+      QualityPreset.high,
+    );
+    final meta1 = SmartScannerService.compressForHistoryRecompressWithMeta(
+      extractedJpegs[1],
+      QualityPreset.high,
+    );
+    final meta2 = SmartScannerService.compressForHistoryRecompressWithMeta(
+      extractedJpegs[2],
+      QualityPreset.high,
+    );
+
+    // Halaman 1 & 3 Portrait (630x840), Halaman 2 Landscape (840x630)
+    expect(meta0.width, lessThan(meta0.height));
+    expect(meta0.height, equals(840));
+    expect(meta1.width, greaterThan(meta1.height));
+    expect(meta1.width, equals(840));
+    expect(meta2.width, lessThan(meta2.height));
+    expect(meta2.height, equals(840));
   });
 }
+
 

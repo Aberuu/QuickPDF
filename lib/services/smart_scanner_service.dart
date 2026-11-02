@@ -220,34 +220,67 @@ class SmartScannerService {
     Uint8List sourceBytes,
     QualityPreset preset,
   ) {
+    return compressForHistoryRecompressWithMeta(sourceBytes, preset).bytes;
+  }
+
+  /// Mengompres citra riwayat PDF beserta metadata dimensi hasil kompresi
+  /// agar orientasi halaman (portrait/landscape) dan resolusi DPI tetap terjaga.
+  static ({Uint8List bytes, int width, int height})
+      compressForHistoryRecompressWithMeta(
+    Uint8List sourceBytes,
+    QualityPreset preset,
+  ) {
     final decoded = img.decodeImage(sourceBytes);
-    if (decoded == null) return sourceBytes;
+    if (decoded == null) {
+      return (bytes: sourceBytes, width: 595, height: 842);
+    }
     img.Image working = img.bakeOrientation(decoded);
-    final int targetWidth;
+    final maxDim = math.max(working.width, working.height);
+    final bool isThumbnailSource = maxDim < 500;
+
+    final int targetMaxDim;
     final int targetJpgQuality;
     switch (preset) {
       case QualityPreset.low:
-        targetWidth = 180;
-        targetJpgQuality = 42;
+        targetMaxDim = isThumbnailSource ? 180 : 840;
+        targetJpgQuality = isThumbnailSource ? 42 : 48;
         break;
       case QualityPreset.medium:
-        targetWidth = 240;
-        targetJpgQuality = 72;
+        targetMaxDim = isThumbnailSource ? 240 : 1500;
+        targetJpgQuality = isThumbnailSource ? 72 : 74;
         break;
       case QualityPreset.high:
-        targetWidth = 320;
+        targetMaxDim = isThumbnailSource ? 320 : 2400;
         targetJpgQuality = 92;
         break;
     }
-    working = img.copyResize(
-      working,
-      width: targetWidth,
-      interpolation: img.Interpolation.linear,
-    );
-    return Uint8List.fromList(
+
+    if (isThumbnailSource || maxDim > targetMaxDim) {
+      if (working.width >= working.height) {
+        working = img.copyResize(
+          working,
+          width: targetMaxDim,
+          interpolation: img.Interpolation.linear,
+        );
+      } else {
+        working = img.copyResize(
+          working,
+          height: targetMaxDim,
+          interpolation: img.Interpolation.linear,
+        );
+      }
+    }
+
+    final encoded = Uint8List.fromList(
       img.encodeJpg(working, quality: targetJpgQuality),
     );
+    return (
+      bytes: encoded,
+      width: working.width,
+      height: working.height,
+    );
   }
+
 
   /// Menghasilkan berkas dokumen PDF dari daftar halaman dalam waktu cepat.
   /// Meneruskan proses ke [PdfGeneratorService.buildPdfDocument] dengan rotasi dan kompresi yang sesuai.

@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../models/pdf_models.dart';
 import 'file_storage_helper.dart';
+import 'local_history_store.dart';
 import 'smart_scanner_service.dart';
 
 class PdfGenerationResult {
@@ -26,6 +27,78 @@ class PdfGeneratorService {
   static final Map<String, List<Uint8List>> _sessionPageImages =
       <String, List<Uint8List>>{};
 
+  static void clearSessionCacheForTesting() {
+    _sessionPageImages.clear();
+  }
+
+  /// Mengekstrak seluruh stream citra JPEG (/DCTDecode) yang tertanam di dalam biner PDF
+  /// sesuai urutan halaman agar kompresi ulang pasca-restart tetap mempertahankan seluruh halaman.
+  static List<Uint8List> extractEmbeddedJpegsFromPdf(Uint8List pdfBytes) {
+    final results = <Uint8List>[];
+    if (pdfBytes.length < 32) return results;
+
+    final limit = pdfBytes.length - 16;
+    int i = 0;
+    while (i < limit) {
+      // Cari kata kunci 'stream' ([115, 116, 114, 101, 97, 109]) yang bukan bagian dari 'endstream'
+      if (pdfBytes[i] == 115 &&
+          pdfBytes[i + 1] == 116 &&
+          pdfBytes[i + 2] == 114 &&
+          pdfBytes[i + 3] == 101 &&
+          pdfBytes[i + 4] == 97 &&
+          pdfBytes[i + 5] == 109 &&
+          (i == 0 || pdfBytes[i - 1] != 100)) {
+        int dataStart = i + 6;
+        if (dataStart < pdfBytes.length && pdfBytes[dataStart] == 13) {
+          dataStart++;
+        }
+        if (dataStart < pdfBytes.length && pdfBytes[dataStart] == 10) {
+          dataStart++;
+        }
+        // Periksa header JPEG SOI (0xFF 0xD8 0xFF)
+        if (dataStart + 4 < pdfBytes.length &&
+            pdfBytes[dataStart] == 0xFF &&
+            pdfBytes[dataStart + 1] == 0xD8 &&
+            pdfBytes[dataStart + 2] == 0xFF) {
+          int endPos = -1;
+          for (int k = dataStart + 4; k <= pdfBytes.length - 9; k++) {
+            // Cari 'endstream' ([101, 110, 100, 115, 116, 114, 101, 97, 109])
+            if (pdfBytes[k] == 101 &&
+                pdfBytes[k + 1] == 110 &&
+                pdfBytes[k + 2] == 100 &&
+                pdfBytes[k + 3] == 115 &&
+                pdfBytes[k + 4] == 116 &&
+                pdfBytes[k + 5] == 114 &&
+                pdfBytes[k + 6] == 101 &&
+                pdfBytes[k + 7] == 97 &&
+                pdfBytes[k + 8] == 109) {
+              int dataEnd = k;
+              while (dataEnd > dataStart &&
+                  (pdfBytes[dataEnd - 1] == 10 || pdfBytes[dataEnd - 1] == 13)) {
+                dataEnd--;
+              }
+              if (dataEnd - dataStart >= 4 &&
+                  pdfBytes[dataEnd - 2] == 0xFF &&
+                  pdfBytes[dataEnd - 1] == 0xD9) {
+                endPos = k;
+                results.add(
+                  Uint8List.fromList(pdfBytes.sublist(dataStart, dataEnd)),
+                );
+                break;
+              }
+            }
+          }
+          if (endPos != -1) {
+            i = endPos + 9;
+            continue;
+          }
+        }
+      }
+      i++;
+    }
+    return results;
+  }
+
   static String sanitizeFileName(String rawFileName) {
     String normalizedName = rawFileName.trim();
     if (normalizedName.isEmpty) {
@@ -39,7 +112,8 @@ class PdfGeneratorService {
 
   static String sanitizeWatermarkText(String rawWatermark) {
     final trimmed = rawWatermark
-        .replaceAll(RegExp(r'[^\x20-\x7E]'), '')
+        .replaceAll(RegExp(r'[^\x20-\x7E]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim()
         .toUpperCase();
     return trimmed.isEmpty ? 'CONFIDENTIAL' : trimmed;
@@ -83,7 +157,14 @@ class PdfGeneratorService {
         qualityPreset,
         rotationQuarterTurns: pageItem.rotationQuarterTurns,
       );
-      pageImagesForCache.add(compressedBytes);
+      final highResSourceBytes = qualityPreset == QualityPreset.high
+          ? compressedBytes
+          : SmartScannerService.compressForPdf(
+              pageItem.displayBytes,
+              QualityPreset.high,
+              rotationQuarterTurns: pageItem.rotationQuarterTurns,
+            );
+      pageImagesForCache.add(highResSourceBytes);
       final pdfImage = pw.MemoryImage(compressedBytes);
 
       final isQuarterTurn = pageItem.rotationQuarterTurns % 2 != 0;
@@ -194,7 +275,18 @@ class PdfGeneratorService {
     required PdfHistoryEntry entry,
     required QualityPreset targetQuality,
   }) async {
-    final cachedPages = _sessionPageImages[entry.id];
+    List<Uint8List>? cachedPages = _sessionPageImages[entry.id];
+    if (cachedPages == null || cachedPages.isEmpty) {
+      final existingPdfBytes = await LocalHistoryStore.resolvePdfBytes(entry);
+      if (existingPdfBytes != null && existingPdfBytes.isNotEmpty) {
+        final extracted = extractEmbeddedJpegsFromPdf(existingPdfBytes);
+        if (extracted.isNotEmpty) {
+          cachedPages = extracted;
+          _sessionPageImages[entry.id] = extracted;
+        }
+      }
+    }
+
     final fallbackThumb = entry.thumbnailBytes.isNotEmpty
         ? entry.thumbnailBytes
         : SmartScannerService.generateSampleSheetBytes(templateIndex: 0);
@@ -210,24 +302,24 @@ class PdfGeneratorService {
       compress: true,
     );
 
-    final pageFormat = _resolvePageFormat(
-      paperSize: entry.paperSize,
-      imgWidth: 595,
-      imgHeight: 842,
-    );
     final marginPt = entry.margin.points;
     final count = entry.pageCount.clamp(1, 50);
 
     for (int i = 0; i < count; i++) {
-      final rawPageBytes = (cachedPages != null && i < cachedPages.length)
-          ? cachedPages[i]
+      final rawPageBytes = (cachedPages != null && cachedPages.isNotEmpty)
+          ? cachedPages[i.clamp(0, cachedPages.length - 1)]
           : fallbackThumb;
-      final recompressedImgBytes =
-          SmartScannerService.compressForHistoryRecompress(
+      final recompressedMeta =
+          SmartScannerService.compressForHistoryRecompressWithMeta(
         rawPageBytes,
         targetQuality,
       );
-      final pdfImage = pw.MemoryImage(recompressedImgBytes);
+      final pageFormat = _resolvePageFormat(
+        paperSize: entry.paperSize,
+        imgWidth: recompressedMeta.width.toDouble(),
+        imgHeight: recompressedMeta.height.toDouble(),
+      );
+      final pdfImage = pw.MemoryImage(recompressedMeta.bytes);
       doc.addPage(
         pw.Page(
           pageFormat: pageFormat,

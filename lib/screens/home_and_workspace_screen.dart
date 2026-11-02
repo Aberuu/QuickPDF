@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/pdf_models.dart';
@@ -354,6 +355,31 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
+  /// Bersihkan seluruh halaman di Meja Kerja dengan dukungan tombol Urungkan (Undo)
+  void _clearWorkspaceWithUndo() {
+    if (_workspacePages.isEmpty) return;
+    final backup = List<ScannedPageItem>.from(_workspacePages);
+    setState(() {
+      _workspacePages.clear();
+    });
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${backup.length} halaman dibersihkan dari Meja Kerja.'),
+        action: SnackBarAction(
+          label: 'Urungkan',
+          textColor: const Color(0xFFFCA5A5),
+          onPressed: () {
+            setState(() {
+              _workspacePages.addAll(backup);
+            });
+            _setActiveTab(ActiveTab.workspace);
+          },
+        ),
+      ),
+    );
+  }
+
   /// Lihat Halaman Besar (Full-screen preview dengan pinch-to-zoom)
   void _openFullScreenPreview(int index) {
     Navigator.of(context).push(
@@ -504,7 +530,8 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
         paperSize: request.paperSize,
         marginOption: request.margin,
         qualityPreset: request.quality,
-        saveToDevice: request.actionType == ExportActionType.saveToDevice,
+        saveToDevice:
+            request.actionType == ExportActionType.saveToDevice || !kIsWeb,
         includeWatermark: request.includeWatermark,
         watermarkText: request.watermarkText,
         isPasswordProtected: request.isPasswordProtected,
@@ -1599,11 +1626,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                   icon: Icons.delete_sweep_outlined,
                   label: 'Bersihkan',
                   isDestructive: true,
-                  onTap: () {
-                    setState(() {
-                      _workspacePages.clear();
-                    });
-                  },
+                  onTap: _clearWorkspaceWithUndo,
                 ),
               ],
             ),
@@ -2203,7 +2226,13 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                                   ),
                                 ),
                               ),
-                              if (entry.isPasswordProtected)
+                              if (entry.isPasswordProtected) ...[
+                                Positioned.fill(
+                                  child: Container(
+                                    color: const Color(0xFF0F172A)
+                                        .withValues(alpha: 0.72),
+                                  ),
+                                ),
                                 Positioned(
                                   top: 3,
                                   right: 3,
@@ -2220,122 +2249,128 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                                     ),
                                   ),
                                 ),
+                              ],
                             ],
                           ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Baris Kategori + Timestamp
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 1.5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary
-                                        .withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    entry.category.shortBadgeLabel,
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: theme.colorScheme.primary,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () => _openHistoryPdf(entry),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Baris Kategori + Timestamp
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 1.5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary
+                                          .withValues(alpha: 0.14),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      entry.category.shortBadgeLabel,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: theme.colorScheme.primary,
+                                      ),
                                     ),
                                   ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      KertasFormatters.formatTimestamp(
+                                        entry.createdAt,
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: theme.textTheme.bodySmall?.color,
+                                        fontFeatures: KertasTheme.tabularNums,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                entry.fileName,
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
                                 ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    KertasFormatters.formatTimestamp(
-                                      entry.createdAt,
-                                    ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 2,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text(
+                                    '${KertasFormatters.formatBytes(entry.fileSizeBytes)} • ${entry.quality.historyQualityLabel}',
                                     style: TextStyle(
-                                      fontSize: 11,
-                                      color: theme.textTheme.bodySmall?.color,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.colorScheme.primary,
                                       fontFeatures: KertasTheme.tabularNums,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              entry.fileName,
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w800,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 3),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 2,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text(
-                                  '${KertasFormatters.formatBytes(entry.fileSizeBytes)} • ${entry.quality.historyQualityLabel}',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: theme.colorScheme.primary,
-                                    fontFeatures: KertasTheme.tabularNums,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: KertasColors.emeraldNeon
-                                        .withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    'OCR Siap',
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: isDark
-                                          ? KertasColors.emeraldNeon
-                                          : KertasColors.successGreen,
-                                    ),
-                                  ),
-                                ),
-                                if (entry.hasWatermark)
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 5,
                                       vertical: 1,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.amber.withValues(alpha: 0.16),
+                                      color: KertasColors.emeraldNeon
+                                          .withValues(alpha: 0.14),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
-                                    child: const Text(
-                                      'Watermark',
+                                    child: Text(
+                                      'OCR Siap',
                                       style: TextStyle(
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w700,
-                                        color: Color(0xFFD97706),
+                                        color: isDark
+                                            ? KertasColors.emeraldNeon
+                                            : KertasColors.successGreen,
                                       ),
                                     ),
                                   ),
-                              ],
-                            ),
-                          ],
+                                  if (entry.hasWatermark)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            Colors.amber.withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'Watermark',
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFFD97706),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       // Tombol Pratinjau, Bagikan, Hapus, dan Menu 3-Titik
