@@ -13,6 +13,8 @@ class LocalHistoryStore {
   static const String _defaultMarginKey = 'kertas_pdf_default_margin_v1';
   static const String _defaultQualityKey = 'kertas_pdf_default_quality_v1';
 
+  static final Map<String, Uint8List> _sessionPdfCache = <String, Uint8List>{};
+
   static Future<List<PdfHistoryEntry>> loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final rawList = prefs.getStringList(_historyKey) ?? const [];
@@ -20,7 +22,14 @@ class LocalHistoryStore {
     for (final raw in rawList) {
       try {
         final map = jsonDecode(raw) as Map<String, dynamic>;
-        entries.add(PdfHistoryEntry.fromJson(map));
+        var entry = PdfHistoryEntry.fromJson(map);
+        if ((entry.pdfBytes == null || entry.pdfBytes!.isEmpty) &&
+            _sessionPdfCache.containsKey(entry.id)) {
+          entry = entry.copyWith(pdfBytes: _sessionPdfCache[entry.id]);
+        } else if (entry.pdfBytes != null && entry.pdfBytes!.isNotEmpty) {
+          _sessionPdfCache[entry.id] = entry.pdfBytes!;
+        }
+        entries.add(entry);
       } catch (_) {}
     }
     entries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -28,6 +37,9 @@ class LocalHistoryStore {
   }
 
   static Future<void> addHistoryEntry(PdfHistoryEntry entry) async {
+    if (entry.pdfBytes != null && entry.pdfBytes!.isNotEmpty) {
+      _sessionPdfCache[entry.id] = entry.pdfBytes!;
+    }
     final prefs = await SharedPreferences.getInstance();
     final current = await loadHistory();
     final updated = [
@@ -44,6 +56,7 @@ class LocalHistoryStore {
     PdfHistoryEntry entry, {
     required bool deletePhysicalFile,
   }) async {
+    _sessionPdfCache.remove(entry.id);
     if (deletePhysicalFile && entry.filePath != null) {
       await deleteLocalFileIfPossible(entry.filePath);
     }
@@ -54,8 +67,11 @@ class LocalHistoryStore {
     await prefs.setStringList(_historyKey, encoded);
   }
 
-  /// Memperbarui entri riwayat (misal ganti nama berkas atau kategori)
+  /// Memperbarui entri riwayat (misal ganti nama berkas, kategori, atau kompres ulang)
   static Future<void> updateHistoryEntry(PdfHistoryEntry updatedEntry) async {
+    if (updatedEntry.pdfBytes != null && updatedEntry.pdfBytes!.isNotEmpty) {
+      _sessionPdfCache[updatedEntry.id] = updatedEntry.pdfBytes!;
+    }
     final prefs = await SharedPreferences.getInstance();
     final current = await loadHistory();
     final updated = current
@@ -67,6 +83,7 @@ class LocalHistoryStore {
 
   /// Membersihkan seluruh daftar riwayat lokal
   static Future<void> clearAllHistory({bool deletePhysicalFiles = false}) async {
+    _sessionPdfCache.clear();
     if (deletePhysicalFiles) {
       final current = await loadHistory();
       for (final entry in current) {
@@ -83,6 +100,10 @@ class LocalHistoryStore {
   static Future<Uint8List?> resolvePdfBytes(PdfHistoryEntry entry) async {
     if (entry.pdfBytes != null && entry.pdfBytes!.isNotEmpty) {
       return entry.pdfBytes;
+    }
+    final cached = _sessionPdfCache[entry.id];
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
     }
     return await readBytesFromLocalFile(entry.filePath);
   }

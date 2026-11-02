@@ -23,6 +23,9 @@ class PdfGenerationResult {
 }
 
 class PdfGeneratorService {
+  static final Map<String, List<Uint8List>> _sessionPageImages =
+      <String, List<Uint8List>>{};
+
   static String sanitizeFileName(String rawFileName) {
     String normalizedName = rawFileName.trim();
     if (normalizedName.isEmpty) {
@@ -32,6 +35,14 @@ class PdfGeneratorService {
       normalizedName = '$normalizedName.pdf';
     }
     return normalizedName;
+  }
+
+  static String sanitizeWatermarkText(String rawWatermark) {
+    final trimmed = rawWatermark
+        .replaceAll(RegExp(r'[^\x20-\x7E]'), '')
+        .trim()
+        .toUpperCase();
+    return trimmed.isEmpty ? 'CONFIDENTIAL' : trimmed;
   }
 
   /// Menghasilkan file PDF dari daftar halaman dalam waktu cepat (< 3 detik untuk 10 foto)
@@ -51,10 +62,7 @@ class PdfGeneratorService {
     final stopwatch = Stopwatch()..start();
 
     final normalizedName = sanitizeFileName(rawFileName);
-
-    final cleanWatermark = watermarkText.trim().isEmpty
-        ? 'CONFIDENTIAL'
-        : watermarkText.trim().toUpperCase();
+    final cleanWatermark = sanitizeWatermarkText(watermarkText);
     final hasPassword =
         isPasswordProtected && password != null && password.trim().isNotEmpty;
 
@@ -67,6 +75,7 @@ class PdfGeneratorService {
     );
 
     final marginPt = marginOption.points;
+    final pageImagesForCache = <Uint8List>[];
 
     for (final pageItem in pages) {
       final compressedBytes = SmartScannerService.compressForPdf(
@@ -74,6 +83,7 @@ class PdfGeneratorService {
         qualityPreset,
         rotationQuarterTurns: pageItem.rotationQuarterTurns,
       );
+      pageImagesForCache.add(compressedBytes);
       final pdfImage = pw.MemoryImage(compressedBytes);
 
       final isQuarterTurn = pageItem.rotationQuarterTurns % 2 != 0;
@@ -168,12 +178,104 @@ class PdfGeneratorService {
       password: hasPassword ? password.trim() : null,
     );
 
+    _sessionPageImages[entry.id] = pageImagesForCache;
+
     return PdfGenerationResult(
       pdfBytes: pdfBytes,
       fileName: normalizedName,
       savedPath: savedPath,
       elapsedMs: stopwatch.elapsedMilliseconds,
       historyEntry: entry,
+    );
+  }
+
+  /// Mengompres ulang entri riwayat PDF ke tingkat kualitas/DPI baru (Layar 4 Menu 3-Titik: Kompres Ukuran PDF)
+  static Future<PdfHistoryEntry> recompressHistoryEntry({
+    required PdfHistoryEntry entry,
+    required QualityPreset targetQuality,
+  }) async {
+    final cachedPages = _sessionPageImages[entry.id];
+    final fallbackThumb = entry.thumbnailBytes.isNotEmpty
+        ? entry.thumbnailBytes
+        : SmartScannerService.generateSampleSheetBytes(templateIndex: 0);
+
+    final cleanWatermark = sanitizeWatermarkText(entry.watermarkText);
+    final doc = pw.Document(
+      title: entry.fileName,
+      author: 'QuickPDF',
+      creator: 'QuickPDF Offline Scanner',
+      subject: entry.isPasswordProtected
+          ? 'Protected AES-128 Local Document'
+          : 'QuickPDF Scan',
+      compress: true,
+    );
+
+    final pageFormat = _resolvePageFormat(
+      paperSize: entry.paperSize,
+      imgWidth: 595,
+      imgHeight: 842,
+    );
+    final marginPt = entry.margin.points;
+    final count = entry.pageCount.clamp(1, 50);
+
+    for (int i = 0; i < count; i++) {
+      final rawPageBytes = (cachedPages != null && i < cachedPages.length)
+          ? cachedPages[i]
+          : fallbackThumb;
+      final recompressedImgBytes =
+          SmartScannerService.compressForHistoryRecompress(
+        rawPageBytes,
+        targetQuality,
+      );
+      final pdfImage = pw.MemoryImage(recompressedImgBytes);
+      doc.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: pw.EdgeInsets.all(marginPt),
+          build: (pw.Context context) {
+            final imageLayer = pw.Center(
+              child: pw.Image(pdfImage, fit: pw.BoxFit.contain),
+            );
+            if (!entry.hasWatermark) return imageLayer;
+            return pw.Stack(
+              alignment: pw.Alignment.center,
+              children: [
+                pw.Positioned.fill(child: imageLayer),
+                pw.Center(
+                  child: pw.Transform.rotate(
+                    angle: -0.785398,
+                    child: pw.Opacity(
+                      opacity: 0.24,
+                      child: pw.Text(
+                        cleanWatermark,
+                        style: pw.TextStyle(
+                          fontSize: 42,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.red900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    final newPdfBytes = await doc.save();
+    String? updatedPath = entry.filePath;
+    if (entry.filePath != null && entry.filePath!.isNotEmpty) {
+      final saved = await saveBytesToLocalFile(entry.fileName, newPdfBytes);
+      if (saved != null) updatedPath = saved;
+    }
+
+    return entry.copyWith(
+      quality: targetQuality,
+      fileSizeBytes: newPdfBytes.lengthInBytes,
+      pdfBytes: newPdfBytes,
+      filePath: updatedPath,
     );
   }
 

@@ -62,6 +62,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
   DocumentCorners? _smoothedCorners;
   double _lockProgress = 0.0;
   bool _showLowContrastHint = false;
+  bool _wasGyroOptimal = true;
   String _guidanceText = 'Mode Manual: ketuk shutter untuk memotret layar/dokumen';
 
   // Daftar halaman yang berhasil dipotret dalam sesi ini
@@ -762,6 +763,23 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     }
   }
 
+  bool _isCornersLevelOptimal(DocumentCorners? corners) {
+    if (corners == null) return true;
+    final dx = corners.topRight.dx - corners.topLeft.dx;
+    final dy = corners.topRight.dy - corners.topLeft.dy;
+    if (dx.abs() < 1e-4) return true;
+    final deg = (math.atan2(dy, dx) * 180.0 / math.pi).abs();
+    return deg.clamp(0.1, 45.0) <= 2.2;
+  }
+
+  void _updateGyroHaptic(DocumentCorners? nextCorners) {
+    final bool nowOptimal = _isCornersLevelOptimal(nextCorners);
+    if (nextCorners != null && nowOptimal && !_wasGyroOptimal) {
+      HapticFeedback.selectionClick();
+    }
+    _wasGyroOptimal = nowOptimal;
+  }
+
   void _handleDetectionStep({
     required DetectionResult? detection,
     required Uint8List? fingerprint,
@@ -772,6 +790,7 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
     // Jika Auto-Scan dinonaktifkan (Mode Manual), tetap tampilkan poligon deteksi sebagai panduan
     // tetapi jangan pernah memicu auto-capture secara otomatis.
     if (!_isAutoScanEnabled) {
+      _updateGyroHaptic(detection?.corners);
       setState(() {
         _smoothedCorners = detection?.corners;
         _lockProgress = 0.0;
@@ -790,6 +809,8 @@ class _LiveScannerScreenState extends State<LiveScannerScreen>
       frameFingerprint: fingerprint,
       nowMs: nowMs,
     );
+
+    _updateGyroHaptic(step.smoothedCorners);
 
     setState(() {
       _scannerState = step.state;

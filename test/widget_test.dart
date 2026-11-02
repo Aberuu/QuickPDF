@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:kertas_pdf/main.dart';
 import 'package:kertas_pdf/models/pdf_models.dart';
 import 'package:kertas_pdf/screens/full_screen_preview_dialog.dart';
+import 'package:kertas_pdf/services/local_history_store.dart';
 import 'package:kertas_pdf/services/pdf_generator_service.dart';
 import 'package:kertas_pdf/services/smart_scanner_service.dart';
 import 'package:kertas_pdf/widgets/screenshot_capture_animation.dart';
@@ -466,18 +468,28 @@ void main() {
     await tester.tap(find.text('Simpan PDF'));
     await tester.pumpAndSettle();
 
-    // 5. Verifikasi Layar 4 (Riwayat): Dokumen memiliki badge Watermark, Menu 3-Titik (Ganti Nama), & Verifikasi Sandi
+    // 5. Verifikasi Layar 4 (Riwayat): Dokumen memiliki badge Watermark, Menu 3-Titik (Ganti Nama & Kompres), & Verifikasi Sandi
     await tester.tap(find.text('Riwayat PDF (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Watermark'), findsOneWidget);
     expect(find.text('OCR Siap'), findsOneWidget);
 
-    // Buka Menu 3-Titik (Kelola Berkas PDF Lokal) -> Ganti Nama Berkas
+    // Buka Menu 3-Titik (Kelola Berkas PDF Lokal) -> Pastikan 'Kompres Ukuran PDF' tersedia & Ganti Nama terkunci sandi
     await tester.tap(find.byTooltip('Menu Dokumen').first);
     await tester.pumpAndSettle();
     expect(find.text('Kelola Berkas PDF Lokal'), findsOneWidget);
+    expect(find.text('Kompres Ukuran PDF'), findsOneWidget);
     await tester.tap(find.text('Ganti Nama Berkas'));
     await tester.pumpAndSettle();
+
+    // Karena dokumen diproteksi sandi ('kampus123'), wajib melewati dialog Dokumen Terkunci Sandi terlebih dahulu
+    expect(find.text('Dokumen Terkunci Sandi'), findsOneWidget);
+    final renamePasswordField =
+        find.widgetWithText(TextField, 'Kata sandi dokumen...');
+    await tester.enterText(renamePasswordField, 'kampus123');
+    await tester.tap(find.text('Buka Dokumen'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Ganti Nama & Kategori Berkas'), findsOneWidget);
 
     final renameField = find.widgetWithText(TextField, 'Nama File PDF');
@@ -489,22 +501,39 @@ void main() {
 
     expect(find.text('Kuitansi_Kos_Mei.pdf'), findsOneWidget);
 
-    // Filter berdasarkan kategori 'Tagihan & Keuangan' -> berkas tetap tampil; 'Kantor' -> kosong
+    // Filter berdasarkan kategori 'Kantor' -> muncul kartu 'Dokumen Tidak Ditemukan' & tombol 'Kembalikan Semua Berkas'
     final kantorChip = find.text('Kantor');
     await tester.ensureVisible(kantorChip);
     await tester.pumpAndSettle();
     await tester.tap(kantorChip);
     await tester.pumpAndSettle();
     expect(find.text('Kuitansi_Kos_Mei.pdf'), findsNothing);
+    expect(find.text('Dokumen Tidak Ditemukan'), findsOneWidget);
+    expect(find.text('Kembalikan Semua Berkas'), findsOneWidget);
 
-    final keuanganChip = find.text('Tagihan & Keuangan');
-    await tester.ensureVisible(keuanganChip);
-    await tester.pumpAndSettle();
-    await tester.tap(keuanganChip);
+    // Ketuk 'Kembalikan Semua Berkas' untuk mereset filter kembali ke Semua
+    await tester.tap(find.text('Kembalikan Semua Berkas'));
     await tester.pumpAndSettle();
     expect(find.text('Kuitansi_Kos_Mei.pdf'), findsOneWidget);
 
-    // Uji dialog verifikasi kata sandi saat membuka dokumen terkunci
+    // Uji Kompres Ukuran PDF dari Menu 3-Titik
+    await tester.tap(find.byTooltip('Menu Dokumen').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kompres Ukuran PDF'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dokumen Terkunci Sandi'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Kata sandi dokumen...'),
+      'kampus123',
+    );
+    await tester.tap(find.text('Buka Dokumen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Kompres Ukuran PDF'), findsOneWidget);
+    await tester.tap(find.text('Kompres Sekarang'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Mode Dokumen Ringan'), findsWidgets);
+
+    // Uji dialog verifikasi kata sandi saat membuka dokumen terkunci dengan sandi salah
     await tester.tap(find.byTooltip('Buka & Baca PDF').first);
     await tester.pumpAndSettle();
     expect(find.text('Dokumen Terkunci Sandi'), findsOneWidget);
@@ -519,6 +548,68 @@ void main() {
     // Tutup dialog sandi
     await tester.tap(find.text('Batal'));
     await tester.pumpAndSettle();
+  });
+
+  test(
+      'LocalHistoryStore preserves >4MB PDF bytes in session cache and PdfGeneratorService.recompressHistoryEntry reduces size',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+
+    // 1. Buat berkas > 4 MB tanpa filePath (simulasi Bagikan PDF / Web)
+    final largeBytes = Uint8List((4 * 1024 * 1024) + 512);
+    largeBytes[0] = 0x25; // %PDF header marker
+    final largeEntry = PdfHistoryEntry(
+      id: 'large_shared_pdf',
+      fileName: 'Laporan_Besar.pdf',
+      createdAt: DateTime(2026, 5, 10, 9, 30),
+      pageCount: 12,
+      fileSizeBytes: largeBytes.lengthInBytes,
+      paperSize: PaperSizeOption.a4,
+      margin: PageMarginOption.small,
+      quality: QualityPreset.high,
+      thumbnailBytes: Uint8List.fromList([1, 2, 3]),
+      pdfBytes: largeBytes,
+    );
+
+    await LocalHistoryStore.addHistoryEntry(largeEntry);
+    final loadedList = await LocalHistoryStore.loadHistory();
+    expect(loadedList, hasLength(1));
+    final resolvedBytes =
+        await LocalHistoryStore.resolvePdfBytes(loadedList.first);
+    expect(resolvedBytes, isNotNull);
+    expect(resolvedBytes!.lengthInBytes, equals(largeBytes.lengthInBytes));
+
+    // 2. Uji recompressHistoryEntry dari High (300 DPI) ke Low (72 DPI)
+    final sampleSheet =
+        SmartScannerService.generateSampleSheetBytes(templateIndex: 0);
+    final highResGen = await PdfGeneratorService.buildPdfDocument(
+      pages: [
+        ScannedPageItem(
+          id: 'recompress_p1',
+          sourceLabel: 'Hal 1',
+          originalBytes: sampleSheet,
+          displayBytes: sampleSheet,
+        ),
+      ],
+      rawFileName: 'Uji_Kompres_Res',
+      paperSize: PaperSizeOption.a4,
+      marginOption: PageMarginOption.small,
+      qualityPreset: QualityPreset.high,
+      includeWatermark: true,
+      watermarkText: 'CONFIDENTIAL \u2014 UJIAN\u2122',
+      saveToDevice: false,
+    );
+
+    final lowResEntry = await PdfGeneratorService.recompressHistoryEntry(
+      entry: highResGen.historyEntry,
+      targetQuality: QualityPreset.low,
+    );
+
+    expect(lowResEntry.quality, equals(QualityPreset.low));
+    expect(
+      lowResEntry.fileSizeBytes,
+      lessThan(highResGen.historyEntry.fileSizeBytes),
+    );
   });
 }
 

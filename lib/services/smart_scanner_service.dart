@@ -215,6 +215,40 @@ class SmartScannerService {
     return Uint8List.fromList(img.encodeJpg(thumb, quality: 72));
   }
 
+  /// Mengompres citra untuk fitur Kompres Ukuran PDF pada Riwayat (72 / 150 / 300 DPI)
+  static Uint8List compressForHistoryRecompress(
+    Uint8List sourceBytes,
+    QualityPreset preset,
+  ) {
+    final decoded = img.decodeImage(sourceBytes);
+    if (decoded == null) return sourceBytes;
+    img.Image working = img.bakeOrientation(decoded);
+    final int targetWidth;
+    final int targetJpgQuality;
+    switch (preset) {
+      case QualityPreset.low:
+        targetWidth = 180;
+        targetJpgQuality = 42;
+        break;
+      case QualityPreset.medium:
+        targetWidth = 240;
+        targetJpgQuality = 72;
+        break;
+      case QualityPreset.high:
+        targetWidth = 320;
+        targetJpgQuality = 92;
+        break;
+    }
+    working = img.copyResize(
+      working,
+      width: targetWidth,
+      interpolation: img.Interpolation.linear,
+    );
+    return Uint8List.fromList(
+      img.encodeJpg(working, quality: targetJpgQuality),
+    );
+  }
+
   /// Menghasilkan berkas dokumen PDF dari daftar halaman dalam waktu cepat.
   /// Meneruskan proses ke [PdfGeneratorService.buildPdfDocument] dengan rotasi dan kompresi yang sesuai.
   static Future<PdfGenerationResult> generatePdf({

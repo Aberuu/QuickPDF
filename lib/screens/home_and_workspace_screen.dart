@@ -537,14 +537,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
               label: 'Buka PDF',
               textColor: const Color(0xFF86EFAC),
               onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => PdfViewerScreen(
-                      entry: genResult.historyEntry,
-                      pdfBytes: genResult.pdfBytes,
-                    ),
-                  ),
-                );
+                _openHistoryPdf(genResult.historyEntry);
               },
             ),
           ),
@@ -692,6 +685,9 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
 
   /// Ganti Nama Berkas dari Menu Kontekstual 3-Titik
   Future<void> _renameHistoryEntry(PdfHistoryEntry entry) async {
+    final allowed = await _verifyPasswordIfNeeded(entry);
+    if (!allowed || !mounted) return;
+
     final initialBase = entry.fileName.replaceAll(
       RegExp(r'\.pdf$', caseSensitive: false),
       '',
@@ -787,7 +783,137 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
     );
   }
 
-  /// Modal Menu Kontekstual 3-Titik (Kelola Berkas PDF Lokal — PRD 3.4)
+  /// Kompres Ukuran PDF dari Menu Kontekstual 3-Titik (PRD 3.4)
+  Future<void> _compressHistoryEntry(PdfHistoryEntry entry) async {
+    final allowed = await _verifyPasswordIfNeeded(entry);
+    if (!allowed || !mounted) return;
+
+    QualityPreset selectedPreset = QualityPreset.low;
+
+    final chosenPreset = await showDialog<QualityPreset>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text(
+                'Kompres Ukuran PDF',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pilih tingkat resolusi kompresi untuk "${entry.fileName}" (${KertasFormatters.formatBytes(entry.fileSizeBytes)}):',
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                    const SizedBox(height: 10),
+                    ...QualityPreset.values.map((preset) {
+                      final isSelected = selectedPreset == preset;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () {
+                            setDialogState(() => selectedPreset = preset);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSelected
+                                    ? Theme.of(ctx).colorScheme.primary
+                                    : Theme.of(ctx).dividerColor,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSelected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_off,
+                                  size: 18,
+                                  color: isSelected
+                                      ? Theme.of(ctx).colorScheme.primary
+                                      : null,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        preset.label,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        preset.description,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Theme.of(ctx)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.color,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(selectedPreset),
+                  child: const Text('Kompres Sekarang'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (chosenPreset == null || !mounted) return;
+    final recompressed = await PdfGeneratorService.recompressHistoryEntry(
+      entry: entry,
+      targetQuality: chosenPreset,
+    );
+    await LocalHistoryStore.updateHistoryEntry(recompressed);
+    final refreshed = await LocalHistoryStore.loadHistory();
+    if (!mounted) return;
+    setState(() {
+      _historyEntries = refreshed;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Ukuran "${recompressed.fileName}" dikompres menjadi ${KertasFormatters.formatBytes(recompressed.fileSizeBytes)} (${recompressed.quality.historyQualityLabel}).',
+        ),
+      ),
+    );
+  }
+
+  /// Modal Menu Kontekstual 3-Titik (Kelola Berkas PDF Lokal - PRD 3.4)
   Future<void> _openDocumentActionModal(PdfHistoryEntry entry) async {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -857,6 +983,17 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
                   onTap: () {
                     Navigator.of(ctx).pop();
                     _renameHistoryEntry(entry);
+                  },
+                ),
+                const SizedBox(height: 8),
+                _ModalActionTile(
+                  icon: Icons.compress_outlined,
+                  iconColor: const Color(0xFFF59E0B),
+                  title: 'Kompres Ukuran PDF',
+                  subtitle: 'Kecilkan ukuran file untuk unggah portal kampus/kantor',
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _compressHistoryEntry(entry);
                   },
                 ),
                 const SizedBox(height: 8),
@@ -1770,7 +1907,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
         ),
         const SizedBox(height: 8),
 
-        // 2. Offline Storage Banner (Penyimpanan Offline — PRD 3.4)
+        // 2. Offline Storage Banner (Penyimpanan Offline - PRD 3.4)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -1976,10 +2113,42 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
         else if (filtered.isEmpty)
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                'Tidak ada dokumen yang cocok dengan filter atau kata kunci "$_searchQuery".',
-                textAlign: TextAlign.center,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.find_in_page_outlined,
+                    size: 36,
+                    color: theme.textTheme.bodySmall?.color,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Dokumen Tidak Ditemukan',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tidak ada arsip PDF yang sesuai dengan kata kunci atau filter kategori yang Anda pilih.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.textTheme.bodySmall?.color,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _searchController.clear();
+                        _searchQuery = '';
+                        _selectedCategory = PdfDocumentCategory.all;
+                      });
+                    },
+                    icon: const Icon(Icons.restore_rounded, size: 16),
+                    label: const Text('Kembalikan Semua Berkas'),
+                  ),
+                ],
               ),
             ),
           )
@@ -2225,7 +2394,7 @@ class _HomeAndWorkspaceScreenState extends State<HomeAndWorkspaceScreen> {
             );
           }),
 
-        // 5. Kartu Info Keamanan Lokal (Privasi Berkas Mutlak — PRD 3.4)
+        // 5. Kartu Info Keamanan Lokal (Privasi Berkas Mutlak - PRD 3.4)
         const SizedBox(height: 4),
         Container(
           padding: const EdgeInsets.all(12),
